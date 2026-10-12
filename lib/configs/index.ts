@@ -1,0 +1,1 @@
+export { getResultConfig } from './resolver';

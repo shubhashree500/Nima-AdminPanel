@@ -1,0 +1,17 @@
+[
+  {
+    "Roll No": "UG25-001",
+    "Autonomous Roll No": "NACUG25001",
+    "Name of the Students": "TEST STUDENT",
+    "Department": "Physics",
+    "Examcode": "UG25S1",
+    "subjects": {
+      "Core-1-Major-1": {"subject":"Physics","MidsemMark":16,"PracticalMark":18,"I-Practical":8,"Attandance":5,"SurpriseTest":8,"Assignment":5,"FinalMark":70},
+      "Core-1-Major-2": {"subject":"History","MidsemMark":17,"Attandance":5,"SurpriseTest":8,"Assignment":5,"FinalMark":72},
+      "Core-2-Minor-1": {"subject":"Mathematics","MidsemMark":16,"Attandance":5,"SurpriseTest":8,"Assignment":5,"FinalMark":68},
+      "Multidisciplinary-1": {"subject":"Education","MidsemMark":15,"Attandance":5,"SurpriseTest":8,"Assignment":5,"FinalMark":65},
+      "AEC-I": {"subject":"English","MidsemMark":18,"Attandance":5,"SurpriseTest":8,"Assignment":5,"FinalMark":70},
+      "VAC-I": {"subject":"Environmental Studies","MidsemMark":18,"Attandance":5,"SurpriseTest":8,"Assignment":5,"FinalMark":70}
+    }
+  }
+]
