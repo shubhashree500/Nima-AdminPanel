@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type ReportKind = 'grade-sheets' | 'tabular-register' | 'statistics';
 type Calculation = { id: string; program: string; semester: number; batch?: string | number; course?: string; department?: string; count?: number; status?: string; createdAt?: string; results?: any[]; departments?: any[] };
@@ -55,6 +57,856 @@ export function ReportsView({ kind }: { kind: ReportKind }) {
     return { total: all.length, passed, failed, passRate: passed + failed ? (passed / (passed + failed) * 100) : 0, grades: Object.entries(grades).sort((a,b) => a[0].localeCompare(b[0])), byDept: Object.entries(byDept).sort((a,b) => a[0].localeCompare(b[0])) };
   }, [selected]);
 
+
+
+
+const exportTabularRegisterPdf = () => {
+  if (!selected || kind !== 'tabular-register' || rows.length === 0) return;
+
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 8;
+
+  // Adjust this cutoff if your college needs a different layout.
+  const MAX_SUBJECTS_FOR_TWO_PER_PAGE = 5;
+
+  const display = (value: unknown) =>
+    value === null || value === undefined || value === ''
+      ? '—'
+      : String(value);
+
+  const field = (obj: any, keys: string[]) => {
+    for (const key of keys) {
+      if (obj?.[key] !== undefined && obj?.[key] !== null && obj[key] !== '') {
+        return obj[key];
+      }
+    }
+    return undefined;
+  };
+
+  const getSubjects = (result: any): any[] =>
+    Array.isArray(result?.subjects)
+      ? result.subjects
+      : Array.isArray(result?.courses)
+        ? result.courses
+        : [];
+
+  const getStudentStatus = (result: any) => {
+    const subjects = getSubjects(result);
+    if (!subjects.length) return 'PENDING';
+
+    const grades = subjects.map((s) => String(s?.grade || '').toUpperCase());
+
+    if (grades.some((g) => ['F', 'AB', 'M'].includes(g))) return 'FAIL';
+    if (grades.some((g) => !g)) return 'PENDING';
+
+    return 'PASS';
+  };
+
+  const getClassification = (result: any) => {
+    const status = getStudentStatus(result);
+    if (status === 'FAIL') return 'Fail';
+    if (status === 'PENDING') return 'Pending';
+
+    const sgpa = Number(result?.sgpa);
+    if (!Number.isFinite(sgpa)) return '—';
+    if (sgpa >= 9) return 'Excellent';
+    if (sgpa >= 8) return 'Very Good';
+    if (sgpa >= 7) return 'Good';
+    if (sgpa >= 6) return 'Average';
+
+    return '—';
+  };
+
+  const safeFilename = (value: unknown) =>
+    String(value ?? 'NA')
+      .replace(/[^a-z0-9_-]+/gi, '-')
+      .replace(/^-+|-+$/g, '');
+
+  // Render one student's register inside the supplied vertical area.
+  const renderStudent = (
+    result: any,
+    index: number,
+    startY: number,
+    compact: boolean,
+  ) => {
+    const student = identity(result);
+    const subjects = getSubjects(result);
+    const status = getStudentStatus(result);
+    const fontSize = compact ? 6 : 7;
+    const cellPadding = compact ? 0.8 : 1.2;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(compact ? 9 : 14);
+    doc.text(
+      'NIMAPARA AUTONOMOUS COLLEGE, NIMAPARA',
+      pageWidth / 2,
+      startY + (compact ? 4 : 5),
+      { align: 'center' },
+    );
+
+    doc.setFontSize(compact ? 8 : 12);
+    doc.text(
+      'TABULATION REGISTER',
+      pageWidth / 2,
+      startY + (compact ? 8.5 : 11),
+      { align: 'center' },
+    );
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(compact ? 6.5 : 9);
+    doc.text(
+      `${selected.program} - SEMESTER ${selected.semester} EXAMINATION`,
+      pageWidth / 2,
+      startY + (compact ? 12.5 : 17),
+      { align: 'center' },
+    );
+
+    doc.text(
+      `Batch: ${display(selected.batch)}    Department: ${display(deptOf(result))}`,
+      pageWidth / 2,
+      startY + (compact ? 16 : 22),
+      { align: 'center' },
+    );
+
+    doc.setFontSize(compact ? 6 : 8);
+    doc.text(
+      `Student ${index + 1} of ${rows.length}`,
+      pageWidth - margin,
+      startY + (compact ? 16 : 22),
+      { align: 'right' },
+    );
+
+    autoTable(doc, {
+      startY: startY + (compact ? 18 : 25),
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      pageBreak: 'avoid',
+      styles: {
+        fontSize: compact ? 6 : 8,
+        cellPadding: compact ? 1 : 2,
+        overflow: 'linebreak',
+        valign: 'middle',
+      },
+      body: [
+        [
+          'Student Name',
+          display(nameOf(result)),
+          'Department',
+          display(deptOf(result)),
+        ],
+        [
+          'College Roll',
+          display(rollOf(result)),
+          'Autonomous Roll',
+          display(
+            field(student, [
+              'Autonomous Roll No',
+              'autonomousRollNo',
+              'autonomousRoll',
+            ]),
+          ),
+        ],
+        [
+          'Exam Roll',
+          display(
+            field(student, [
+              'Exam Roll',
+              'Exam Roll No',
+              'Exam Roll No.',
+              'examRoll',
+              'examRollNo',
+            ]),
+          ),
+          'Exam Code',
+          display(
+            field(student, [
+              'Exam Code',
+              'Examcode',
+              'examCode',
+              'examcode',
+            ]),
+          ),
+        ],
+      ],
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 25 },
+        1: { cellWidth: 85 },
+        2: { fontStyle: 'bold', cellWidth: 25 },
+        3: { cellWidth: 'auto' },
+      },
+    });
+
+    let y = (doc as any).lastAutoTable.finalY + (compact ? 1.5 : 3);
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      pageBreak: 'avoid',
+      styles: {
+        fontSize,
+        cellPadding,
+        overflow: 'linebreak',
+        valign: 'middle',
+        minCellHeight: compact ? 3.5 : 4,
+      },
+      headStyles: {
+        fillColor: [230, 230, 230],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+      },
+      head: [[
+        'Sl.',
+        'Paper Code',
+        'Subject',
+        'Mid Sem',
+        'Full Mark',
+        'Secured',
+        'Total',
+        'Grace',
+        'Grade',
+        'GP',
+        'Credit',
+        'CP',
+        'Result',
+      ]],
+      body: subjects.map((subject: any, subjectIndex: number) => {
+        const marks = field(subject, ['marks', 'totalMarks']);
+
+        return [
+          subjectIndex + 1,
+          display(field(subject, ['paperCode', 'paper', 'code'])),
+          display(field(subject, ['subjectName', 'subject', 'name'])),
+          display(field(subject, [
+            'midsemMarks',
+            'midSemMarks',
+            'midsemMark',
+            'midSemMark',
+            'midsem',
+          ])),
+          display(field(subject, ['fullMark', 'fullMarks'])),
+          display(field(subject, [
+            'endSemMarks',
+            'endsemMarks',
+            'finalMark',
+            'finalMarks',
+          ]) ?? marks),
+          display(marks),
+          display(field(subject, ['grace', 'graceMarks'])),
+          display(subject.grade),
+          display(field(subject, ['gradePoint', 'grade_point'])),
+          display(subject.credit),
+          display(field(subject, ['creditPoint', 'creditPoints'])),
+          display(field(subject, ['result', 'status']) ?? status),
+        ];
+      }),
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 19 },
+        2: { cellWidth: 'auto' },
+        3: { cellWidth: 17 },
+        4: { cellWidth: 17 },
+        5: { cellWidth: 17 },
+        6: { cellWidth: 15 },
+        7: { cellWidth: 12 },
+        8: { cellWidth: 13 },
+        9: { cellWidth: 10 },
+        10: { cellWidth: 14 },
+        11: { cellWidth: 12 },
+        12: { cellWidth: 17 },
+      },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + (compact ? 1.5 : 3);
+
+    const totalFullMarks = subjects.reduce(
+      (sum, subject) => sum + (Number(subject?.fullMark) || 0),
+      0,
+    );
+    const totalSecuredMarks = subjects.reduce(
+      (sum, subject) => sum + (Number(subject?.marks) || 0),
+      0,
+    );
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      pageBreak: 'avoid',
+      styles: {
+        fontSize: compact ? 5.8 : 7,
+        cellPadding: compact ? 1 : 1.8,
+        overflow: 'linebreak',
+        halign: 'center',
+      },
+      headStyles: {
+        fillColor: [240, 240, 240],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+      },
+      head: [[
+        'Full Marks',
+        'Secured Total',
+        'Total Credits',
+        'Total Credit Points',
+        'SGPA',
+        'Percentage',
+        'Result',
+        'Classification',
+      ]],
+      body: [[
+        totalFullMarks,
+        totalSecuredMarks,
+        display(result.totalCredits),
+        display(result.totalCreditPoints),
+        display(result.sgpa),
+        result.percentage == null ? '—' : `${result.percentage}%`,
+        status,
+        getClassification(result),
+      ]],
+    });
+
+    // A compact separator helps distinguish the two student records.
+    if (compact) {
+      const endY = (doc as any).lastAutoTable.finalY;
+      doc.setDrawColor(150);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.line(margin, endY + 2, pageWidth - margin, endY + 2);
+      doc.setLineDashPattern([], 0);
+    }
+  };
+
+  let index = 0;
+  let pageStarted = false;
+
+  while (index < rows.length) {
+    const current = rows[index];
+    const currentSubjects = getSubjects(current);
+
+    const next = rows[index + 1];
+    const nextSubjects = next ? getSubjects(next) : [];
+
+    const canSharePage =
+      Boolean(next) &&
+      currentSubjects.length <= MAX_SUBJECTS_FOR_TWO_PER_PAGE &&
+      nextSubjects.length <= MAX_SUBJECTS_FOR_TWO_PER_PAGE;
+
+    if (pageStarted) doc.addPage();
+    pageStarted = true;
+
+    if (canSharePage) {
+      // Each compact record occupies one half of the landscape page.
+      renderStudent(current, index, 4, true);
+      renderStudent(next, index + 1, 106, true);
+      index += 2;
+    } else {
+      // Larger subject lists get a full page.
+      renderStudent(current, index, 5, false);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.text(
+        `Calculation ID: ${selected.id} | Status: ${display(selected.status)}`,
+        margin,
+        pageHeight - 5,
+      );
+      doc.setFont('helvetica', 'bold');
+      doc.text(
+        'Controller of Examinations',
+        pageWidth - margin,
+        pageHeight - 5,
+        { align: 'right' },
+      );
+
+      index += 1;
+    }
+
+    // Footer for pages containing two compact student records.
+    if (canSharePage) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6);
+      doc.text(
+        `Calculation ID: ${selected.id} | Status: ${display(selected.status)}`,
+        margin,
+        pageHeight - 3,
+      );
+      doc.setFont('helvetica', 'bold');
+      doc.text(
+        'Controller of Examinations',
+        pageWidth - margin,
+        pageHeight - 3,
+        { align: 'right' },
+      );
+    }
+  }
+
+  doc.save(
+    `TR-${safeFilename(selected.program)}-Sem${selected.semester}-Batch${safeFilename(selected.batch || 'NA')}.pdf`,
+  );
+};
+
+const exportResultStatisticsPdf = () => {
+  if (!selected || kind !== 'statistics') return;
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const LEFT = 10;
+  const RIGHT = 10;
+  const TABLE_WIDTH = pageWidth - LEFT - RIGHT;
+
+  const numberValue = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const normalizeDepartment = (value: unknown): string => {
+    const d = String(value ?? '').trim().toLowerCase();
+
+    if (d === 'odia') return 'Odia';
+    if (d === 'chemistry' || d === 'chem') return 'Chemistry';
+    if (d === 'math' || d === 'mathematics') return 'Mathematics';
+    if (d === 'geology') return 'Geology';
+    if (d === 'commerce') return 'Commerce';
+    if (d === 'mfc' || d === 'master of finance and control') return 'MFC';
+
+    return String(value ?? '').trim() || 'Unassigned';
+  };
+
+  const getSubjects = (student: any): any[] =>
+    Array.isArray(student?.subjects)
+      ? student.subjects
+      : Array.isArray(student?.courses)
+        ? student.courses
+        : [];
+
+  // College convention: zero in every paper means absent.
+  const isAbsent = (student: any): boolean => {
+    const subjects = getSubjects(student);
+
+    return (
+      !subjects.length ||
+      subjects.every((subject) =>
+        numberValue(
+          subject?.totalMark ?? subject?.marks ?? subject?.totalMarks,
+        ) === 0
+      )
+    );
+  };
+
+  const isMP = (student: any): boolean =>
+    student?.mp === true ||
+    String(student?.result ?? '').trim().toUpperCase() === 'MP' ||
+    getSubjects(student).some(
+      (subject) =>
+        String(subject?.grade ?? '').trim().toUpperCase() === 'MP',
+    );
+
+  const isFail = (student: any): boolean =>
+    getSubjects(student).some((subject) =>
+      ['F', 'AB', 'M'].includes(
+        String(subject?.grade ?? '').trim().toUpperCase(),
+      ),
+    );
+
+  const sourceStudents = selected.results || [];
+
+  // Use all departments in the selected calculation, as in the original script.
+  const departmentNames = Array.from(
+    new Set(sourceStudents.map((student) => normalizeDepartment(deptOf(student)))),
+  );
+
+  const streamDefinitions = [
+    { name: 'Arts', departments: ['Odia'] },
+    { name: 'Science', departments: ['Chemistry', 'Geology', 'Mathematics'] },
+    { name: 'Commerce', departments: ['Commerce'] },
+    { name: 'MFC', departments: ['MFC'] },
+  ];
+
+  const knownDepartments = new Set(
+    streamDefinitions.flatMap((stream) => stream.departments),
+  );
+
+  const streams = streamDefinitions
+    .map((stream) => ({
+      name: stream.name,
+      departments: stream.departments.filter((name) =>
+        departmentNames.includes(name),
+      ),
+    }))
+    .filter((stream) => stream.departments.length > 0);
+
+  const otherDepartments = departmentNames
+    .filter((name) => !knownDepartments.has(name))
+    .sort((a, b) => a.localeCompare(b));
+
+  if (otherDepartments.length) {
+    streams.push({ name: 'Other', departments: otherDepartments });
+  }
+
+  const calculateDepartmentStatistics = (department: string) => {
+    const students = sourceStudents.filter(
+      (student) => normalizeDepartment(deptOf(student)) === department,
+    );
+
+    let appeared = 0;
+    let cleared = 0;
+    let backFail = 0;
+    let absent = 0;
+    let mp = 0;
+
+    students.forEach((student) => {
+      if (isAbsent(student)) {
+        absent++;
+        return;
+      }
+
+      appeared++;
+
+      if (isMP(student)) {
+        mp++;
+        return;
+      }
+
+      if (isFail(student)) {
+        backFail++;
+      } else {
+        cleared++;
+      }
+    });
+
+    return {
+      department,
+      appeared,
+      cleared,
+      backFail,
+      absent,
+      mp,
+      successPercentage: appeared
+        ? (cleared / appeared) * 100
+        : 0,
+    };
+  };
+
+  const streamStatistics = streams.map((stream) => {
+    const departments = stream.departments.map(
+      calculateDepartmentStatistics,
+    );
+
+    const total = departments.reduce(
+      (acc, row) => ({
+        appeared: acc.appeared + row.appeared,
+        cleared: acc.cleared + row.cleared,
+        backFail: acc.backFail + row.backFail,
+        absent: acc.absent + row.absent,
+        mp: acc.mp + row.mp,
+      }),
+      { appeared: 0, cleared: 0, backFail: 0, absent: 0, mp: 0 },
+    );
+
+    return {
+      name: stream.name,
+      departments,
+      total: {
+        ...total,
+        successPercentage: total.appeared
+          ? (total.cleared / total.appeared) * 100
+          : 0,
+      },
+    };
+  });
+
+  const grandTotal = streamStatistics.reduce(
+    (acc, stream) => ({
+      appeared: acc.appeared + stream.total.appeared,
+      cleared: acc.cleared + stream.total.cleared,
+      backFail: acc.backFail + stream.total.backFail,
+      absent: acc.absent + stream.total.absent,
+      mp: acc.mp + stream.total.mp,
+    }),
+    { appeared: 0, cleared: 0, backFail: 0, absent: 0, mp: 0 },
+  );
+
+  const grandSuccessPercentage = grandTotal.appeared
+    ? (grandTotal.cleared / grandTotal.appeared) * 100
+    : 0;
+
+  const fmt = (value: number) => value.toFixed(2);
+
+  // Header. A logo is optional; add it later if the asset is available.
+  let y = 14;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(
+    'NIMAPARA AUTONOMOUS COLLEGE, NIMAPARA',
+    pageWidth / 2,
+    y,
+    { align: 'center' },
+  );
+
+  y += 6;
+  doc.setFontSize(10);
+  doc.text('RESULT STATISTICS', pageWidth / 2, y, { align: 'center' });
+
+  y += 5;
+  doc.setFontSize(7.5);
+  doc.text(
+    `${String(selected.program).toUpperCase()} — ${selected.semester}${selected.semester === 1 ? 'ST' : selected.semester === 2 ? 'ND' : selected.semester === 3 ? 'RD' : 'TH'} SEMESTER EXAMINATION (${new Date().getFullYear()}) — ${selected.batch ?? 'BATCH NOT SPECIFIED'} ADMISSION BATCH`,
+    pageWidth / 2,
+    y,
+    { align: 'center' },
+  );
+
+  y += 7;
+
+  const COL_WIDTHS = [23, 43, 24, 24, 27, 16, 29];
+  const ROW_HEIGHT = 7;
+  const HEADERS = [
+    'Stream',
+    'Subject / Department',
+    'Appeared',
+    'Cleared',
+    'Back / Fail',
+    'MP',
+    '% of Success',
+  ];
+
+  const drawCell = (
+    x: number,
+    top: number,
+    width: number,
+    height: number,
+    value: unknown,
+    options: {
+      fill?: number[];
+      bold?: boolean;
+      align?: 'left' | 'center' | 'right';
+      fontSize?: number;
+    } = {},
+  ) => {
+   
+    if (options.fill) {
+  const [r, g, b] = options.fill;
+  doc.setFillColor(r ?? 255, g ?? 255, b ?? 255);
+  doc.rect(x, top, width, height, 'F');
+}
+
+    doc.setDrawColor(80);
+    doc.setLineWidth(0.2);
+    doc.rect(x, top, width, height);
+
+    doc.setFont('helvetica', options.bold ? 'bold' : 'normal');
+    doc.setFontSize(options.fontSize ?? 6.5);
+    doc.setTextColor(0);
+
+    const text = String(value ?? '');
+    const lines = doc.splitTextToSize(text, width - 2);
+    const lineHeight = (options.fontSize ?? 6.5) * 0.3528 * 1.15;
+    const textY = top + Math.max(1, (height - lines.length * lineHeight) / 2 + 0.7);
+
+    doc.text(lines, x + (options.align === 'left' ? 1.5 : width / 2), textY, {
+      align: options.align ?? 'center',
+      maxWidth: width - 2,
+    });
+  };
+
+  const drawTableHeader = (top: number) => {
+    let x = LEFT;
+
+    HEADERS.forEach((header, index) => {
+      drawCell(x, top, COL_WIDTHS[index], ROW_HEIGHT, header, {
+        fill: [229, 229, 229],
+        bold: true,
+        fontSize: 6,
+      });
+      x += COL_WIDTHS[index];
+    });
+
+    return top + ROW_HEIGHT;
+  };
+
+  const drawStatisticsRow = (
+    top: number,
+    stream: string,
+    department: string,
+    stats: {
+      appeared: number;
+      cleared: number;
+      backFail: number;
+      mp: number;
+      successPercentage: number;
+    },
+    isTotal = false,
+    isGrandTotal = false,
+  ) => {
+    const fill = isGrandTotal
+      ? [217, 217, 217]
+      : isTotal
+        ? [238, 238, 238]
+        : undefined;
+
+    const values = [
+      stream,
+      department,
+      stats.appeared,
+      stats.cleared,
+      stats.backFail,
+      stats.mp,
+      fmt(stats.successPercentage),
+    ];
+
+    let x = LEFT;
+
+    values.forEach((value, index) => {
+      drawCell(x, top, COL_WIDTHS[index], ROW_HEIGHT, value, {
+        fill,
+        bold: isTotal || isGrandTotal,
+        align: index === 1 ? 'left' : 'center',
+        fontSize: 6.5,
+      });
+      x += COL_WIDTHS[index];
+    });
+
+    return top + ROW_HEIGHT;
+  };
+
+  y = drawTableHeader(y);
+
+  streamStatistics.forEach((stream) => {
+    stream.departments.forEach((departmentStats, index) => {
+      y = drawStatisticsRow(
+        y,
+        index === 0 ? stream.name : '',
+        departmentStats.department.toUpperCase(),
+        departmentStats,
+      );
+    });
+
+    y = drawStatisticsRow(y, '', 'Stream Total', stream.total, true);
+  });
+
+  y = drawStatisticsRow(
+    y,
+    'Grand Total',
+    '',
+    {
+      ...grandTotal,
+      successPercentage: grandSuccessPercentage,
+    },
+    false,
+    true,
+  );
+
+  // Summary section.
+  y += 7;
+
+  const drawSummary = () => {
+    if (y + 48 > pageHeight - 15) {
+      doc.addPage();
+      y = 18;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Summary', LEFT, y);
+    y += 4;
+
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.3);
+    doc.line(LEFT, y, LEFT + TABLE_WIDTH, y);
+    y += 2;
+
+    const summaryRows: [string, string | number][] = [
+      ['Total Appeared', grandTotal.appeared],
+      ['Total Cleared', grandTotal.cleared],
+      ['Total Back / Fail', grandTotal.backFail],
+      ['Total MP', grandTotal.mp],
+      ['Result %', fmt(grandSuccessPercentage)],
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      body: summaryRows,
+      margin: { left: LEFT, right: RIGHT },
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        fontSize: 7,
+        cellPadding: 2,
+        lineWidth: 0.2,
+        lineColor: [80, 80, 80],
+        textColor: [0, 0, 0],
+      },
+      columnStyles: {
+        0: { cellWidth: 125, halign: 'left' },
+        1: { halign: 'center', fontStyle: 'bold' },
+      },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 5;
+  };
+
+  drawSummary();
+
+  if (y + 28 > pageHeight - 5) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.3);
+  doc.line(LEFT, y, LEFT + TABLE_WIDTH, y);
+  y += 5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.text(
+    'Those who secure 0 in all papers are counted as Absent students.',
+    LEFT,
+    y,
+    { maxWidth: TABLE_WIDTH },
+  );
+
+  y += 18;
+
+  const signatureWidth = 55;
+  const signatureX = pageWidth - RIGHT - signatureWidth;
+
+  doc.line(signatureX, y, signatureX + signatureWidth, y);
+  y += 5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.text(
+    'Controller of Examinations',
+    signatureX + signatureWidth,
+    y,
+    { align: 'right' },
+  );
+
+  const safe = (value: unknown) =>
+    String(value ?? 'NA')
+      .replace(/[^a-z0-9_-]+/gi, '-')
+      .replace(/^-+|-+$/g, '');
+
+  doc.save(
+    `PG_Result_Statistics-${safe(selected.program)}-Sem${selected.semester}-Batch${safe(selected.batch || 'NA')}.pdf`,
+  );
+};
+
   const exportCsv = () => {
     if (!selected) return;
     let matrix: unknown[][];
@@ -71,19 +923,449 @@ export function ReportsView({ kind }: { kind: ReportKind }) {
   };
 
   const title = kind === 'grade-sheets' ? 'Grade Sheets' : kind === 'tabular-register' ? 'Tabular Register' : 'Result Statistics';
-  return <section className="min-h-screen bg-gray-50 p-6"><div className="mx-auto max-w-7xl space-y-6">
-    <header><h1 className="text-2xl font-bold text-gray-900">{title}</h1><p className="mt-2 text-sm text-gray-600">Reports are generated from saved calculation records. Confirm the record status before using a report as an official document.</p></header>
-    <div className="rounded-xl border bg-white p-5 shadow-sm"><div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
-      <label className="text-sm font-medium text-gray-700">Calculation<select className="mt-2 w-full rounded-lg border p-3" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setDepartment('All'); }} disabled={loading}><option value="">-- Select calculation --</option>{records.map((r) => <option key={r.id} value={r.id}>{r.program} | Sem {r.semester} | Batch {r.batch || '-'} | {r.count ?? r.results?.length ?? 0} students | {r.status || 'calculated'}</option>)}</select></label>
-      <label className="text-sm font-medium text-gray-700">Department<select className="mt-2 w-full rounded-lg border p-3" value={department} onChange={(e) => setDepartment(e.target.value)}>{departments.map((d) => <option key={d}>{d}</option>)}</select></label>
-      {kind !== 'statistics' && <label className="text-sm font-medium text-gray-700">Search student<input className="mt-2 w-full rounded-lg border p-3" placeholder="Name or roll number" value={search} onChange={(e) => setSearch(e.target.value)} /></label>}
+
+  
+return (
+  <section className="min-h-screen bg-gray-50 p-6">
+    <div className="mx-auto max-w-7xl space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Reports are generated from saved calculation records. Confirm the record status before using a report as an official document.
+        </p>
+      </header>
+
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
+          <label className="text-sm font-medium text-gray-700">
+            Calculation
+            <select
+              className="mt-2 w-full rounded-lg border p-3"
+              value={selectedId}
+              onChange={(e) => {
+                setSelectedId(e.target.value);
+                setDepartment('All');
+              }}
+              disabled={loading}
+            >
+              <option value="">-- Select calculation --</option>
+              {records.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.program} | Sem {r.semester} | Batch {r.batch || '-'} |{' '}
+                  {r.count ?? r.results?.length ?? 0} students |{' '}
+                  {r.status || 'calculated'}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm font-medium text-gray-700">
+            Department
+            <select
+              className="mt-2 w-full rounded-lg border p-3"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+            >
+              {departments.map((d) => (
+                <option key={d}>{d}</option>
+              ))}
+            </select>
+          </label>
+
+          {kind !== 'statistics' && (
+            <label className="text-sm font-medium text-gray-700">
+              Search student
+              <input
+                className="mt-2 w-full rounded-lg border p-3"
+                placeholder="Name or roll number"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+          )}
+        </div>
+
+        {message && (
+          <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
+            {message}
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={() => void load()}
+            disabled={loading}
+            className="rounded-lg border px-4 py-2 text-sm font-semibold"
+          >
+            Refresh
+          </button>
+
+         
+<button
+  onClick={exportCsv}
+  disabled={!selected || loading}
+  className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+>
+  Export CSV
+</button>
+
+{/* Download Result Statistics PDF */}
+{kind === 'statistics' && (
+  <button
+    onClick={exportResultStatisticsPdf}
+    disabled={!selected || loading || !selected.results?.length}
+    className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+  >
+    Download 
+  </button>
+)}
+
+{kind === 'tabular-register' && (
+  <button
+    onClick={exportTabularRegisterPdf}
+    disabled={!selected || loading || rows.length === 0}
+    className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+  >
+    Download TR PDF
+  </button>
+)}
+
+          {kind === 'tabular-register' && (
+            <button
+              onClick={exportTabularRegisterPdf}
+              disabled={!selected || loading || rows.length === 0}
+              className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Download TR PDF
+            </button>
+          )}
+
+          <button
+            onClick={() => window.print()}
+            disabled={!selected}
+            className="rounded-lg border px-4 py-2 text-sm font-semibold"
+          >
+            Print / Save PDF
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-600">Loading saved results…</p>
+      ) : !selected ? (
+        <div className="rounded-xl border bg-white p-6 text-sm text-gray-600">
+          No saved calculations found. Calculate a result first.
+        </div>
+      ) : (
+        <>
+          <div className="rounded-xl border bg-white p-4 text-sm">
+            <div className="flex flex-wrap justify-between gap-3">
+              <span>
+                <strong>
+                  {selected.program} Semester {selected.semester}
+                </strong>{' '}
+                · Batch {selected.batch || '-'} ·{' '}
+                {selected.results?.length || 0} students
+              </span>
+
+              <span
+                className={`rounded-full px-3 py-1 font-semibold ${
+                  selected.status === 'published'
+                    ? 'bg-green-100 text-green-800'
+                    : selected.status === 'verified'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {selected.status || 'calculated'}
+              </span>
+            </div>
+
+            {selected.status !== 'published' && (
+              <p className="mt-2 text-amber-800">
+                This result is not marked published. Treat this report as a
+                review copy, not an official published result.
+              </p>
+            )}
+          </div>
+
+          {kind === 'statistics' ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ['Students', stats.total],
+                  ['Passed', stats.passed],
+                  ['Failed', stats.failed],
+                  ['Pass Percentage', `${stats.passRate.toFixed(2)}%`],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-xl border bg-white p-5"
+                  >
+                    <p className="text-sm text-gray-500">{label}</p>
+                    <p className="mt-2 text-2xl font-bold">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-xl border bg-white p-5">
+                  <h2 className="font-semibold">Department-wise results</h2>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border p-2 text-left">Department</th>
+                          <th className="border p-2">Students</th>
+                          <th className="border p-2">Pass</th>
+                          <th className="border p-2">Fail</th>
+                          <th className="border p-2">Pass %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.byDept.map(([d, v]) => (
+                          <tr key={d}>
+                            <td className="border p-2">{d}</td>
+                            <td className="border p-2 text-center">
+                              {v.students}
+                            </td>
+                            <td className="border p-2 text-center">
+                              {v.passed}
+                            </td>
+                            <td className="border p-2 text-center">
+                              {v.failed}
+                            </td>
+                            <td className="border p-2 text-center">
+                              {(
+                                (v.passed / v.students) *
+                                100
+                              ).toFixed(2)}
+                              %
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-white p-5">
+                  <h2 className="font-semibold">
+                    Grade distribution (subject grades)
+                  </h2>
+                  <div className="mt-3 space-y-2">
+                    {stats.grades.map(([g, n]) => (
+                      <div
+                        key={g}
+                        className="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm"
+                      >
+                        <span className="font-semibold">{g}</span>
+                        <span>{n}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : kind === 'grade-sheets' ? (
+            <div className="space-y-5">
+              {rows.map((r, i) => (
+                <article
+                  key={`${rollOf(r)}-${i}`}
+                  className="break-inside-avoid rounded-xl border bg-white p-6 shadow-sm"
+                >
+                  <div className="border-b pb-4 text-center">
+                    <h2 className="text-lg font-bold">
+                      {selected.program} SEMESTER {selected.semester} GRADE
+                      SHEET
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      Batch {selected.batch || '-'} · Calculation {selected.id}
+                    </p>
+                  </div>
+
+                  <dl className="my-4 grid gap-2 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-gray-500">Student Name</dt>
+                      <dd className="font-semibold">{nameOf(r)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-500">College Roll</dt>
+                      <dd className="font-semibold">{rollOf(r)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-500">Department / Course</dt>
+                      <dd className="font-semibold">{deptOf(r)}</dd>
+                    </div>
+                  </dl>
+
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border p-2 text-left">Paper</th>
+                        <th className="border p-2 text-left">Subject</th>
+                        <th className="border p-2">Marks</th>
+                        <th className="border p-2">Full Marks</th>
+                        <th className="border p-2">Grade</th>
+                        <th className="border p-2">GP</th>
+                        <th className="border p-2">Credit</th>
+                        <th className="border p-2">CP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subjectsOf(r).map((s, j) => (
+                        <tr key={j}>
+                          <td className="border p-2">
+                            {s.paperCode || j + 1}
+                          </td>
+                          <td className="border p-2">
+                            {s.subjectName || s.subject || '-'}
+                          </td>
+                          <td className="border p-2 text-center">
+                            {s.marks ?? 0}
+                          </td>
+                          <td className="border p-2 text-center">
+                            {s.fullMark ?? '-'}
+                          </td>
+                          <td className="border p-2 text-center">
+                            {s.grade || '-'}
+                          </td>
+                          <td className="border p-2 text-center">
+                            {s.gradePoint ?? '-'}
+                          </td>
+                          <td className="border p-2 text-center">
+                            {s.credit ?? '-'}
+                          </td>
+                          <td className="border p-2 text-center">
+                            {s.creditPoint ?? '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                    <div>
+                      Total: <strong>{totalOf(r)} / {maxOf(r)}</strong>
+                    </div>
+                    <div>
+                      Credits: <strong>{r.totalCredits ?? '-'}</strong>
+                    </div>
+                    <div>
+                      Credit Points:{' '}
+                      <strong>{r.totalCreditPoints ?? '-'}</strong>
+                    </div>
+                    <div>
+                      SGPA: <strong>{r.sgpa ?? '-'}</strong>
+                    </div>
+                    <div>
+                      Status: <strong>{statusOf(r)}</strong>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border bg-white p-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">Consolidated tabular register</h2>
+                <span className="text-sm text-gray-500">
+                  {rows.length} row(s)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-2">#</th>
+                      <th className="border p-2">Roll</th>
+                      <th className="border p-2">Student</th>
+                      <th className="border p-2">Department</th>
+                      {paperColumns.map((p) => (
+                        <th key={p} className="border p-2">
+                          {p}
+                        </th>
+                      ))}
+                      <th className="border p-2">Total</th>
+                      <th className="border p-2">SGPA</th>
+                      <th className="border p-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={`${rollOf(r)}-${i}`}>
+                        <td className="border p-2">{i + 1}</td>
+                        <td className="border p-2">{rollOf(r)}</td>
+                        <td className="border p-2">{nameOf(r)}</td>
+                        <td className="border p-2">{deptOf(r)}</td>
+
+                        {paperColumns.map((p) => {
+                          const s = subjectsOf(r).find(
+                            (x) =>
+                              String(
+                                x.subjectName ||
+                                  x.subject ||
+                                  x.paperCode ||
+                                  'Paper',
+                              ) === p,
+                          );
+
+                          return (
+                            <td key={p} className="border p-2">
+                              {s
+                                ? `${s.marks ?? 0} ${
+                                    s.grade ? `(${s.grade})` : ''
+                                  }`
+                                : '—'}
+                            </td>
+                          );
+                        })}
+
+                        <td className="border p-2">
+                          {totalOf(r)}/{maxOf(r)}
+                        </td>
+                        <td className="border p-2">{r.sgpa ?? '-'}</td>
+                        <td className="border p-2">{statusOf(r)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
-    {message && <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">{message}</p>}
-    <div className="mt-4 flex flex-wrap gap-3"><button onClick={() => void load()} disabled={loading} className="rounded-lg border px-4 py-2 text-sm font-semibold">Refresh</button><button onClick={exportCsv} disabled={!selected || loading} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Export CSV</button><button onClick={() => window.print()} disabled={!selected} className="rounded-lg border px-4 py-2 text-sm font-semibold">Print / Save PDF</button></div>
-    </div>
-    {loading ? <p className="text-sm text-gray-600">Loading saved results…</p> : !selected ? <div className="rounded-xl border bg-white p-6 text-sm text-gray-600">No saved calculations found. Calculate a result first.</div> : <>
-      <div className="rounded-xl border bg-white p-4 text-sm"><div className="flex flex-wrap justify-between gap-3"><span><strong>{selected.program} Semester {selected.semester}</strong> · Batch {selected.batch || '-'} · {selected.results?.length || 0} students</span><span className={`rounded-full px-3 py-1 font-semibold ${selected.status === 'published' ? 'bg-green-100 text-green-800' : selected.status === 'verified' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{selected.status || 'calculated'}</span></div>{selected.status !== 'published' && <p className="mt-2 text-amber-800">This result is not marked published. Treat this report as a review copy, not an official published result.</p>}</div>
-      {kind === 'statistics' ? <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[['Students', stats.total], ['Passed', stats.passed], ['Failed', stats.failed], ['Pass Percentage', `${stats.passRate.toFixed(2)}%`]].map(([label, value]) => <div key={String(label)} className="rounded-xl border bg-white p-5"><p className="text-sm text-gray-500">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div>)}</div><div className="grid gap-6 lg:grid-cols-2"><div className="rounded-xl border bg-white p-5"><h2 className="font-semibold">Department-wise results</h2><div className="mt-3 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50"><th className="border p-2 text-left">Department</th><th className="border p-2">Students</th><th className="border p-2">Pass</th><th className="border p-2">Fail</th><th className="border p-2">Pass %</th></tr></thead><tbody>{stats.byDept.map(([d,v]) => <tr key={d}><td className="border p-2">{d}</td><td className="border p-2 text-center">{v.students}</td><td className="border p-2 text-center">{v.passed}</td><td className="border p-2 text-center">{v.failed}</td><td className="border p-2 text-center">{(v.passed / v.students * 100).toFixed(2)}%</td></tr>)}</tbody></table></div></div><div className="rounded-xl border bg-white p-5"><h2 className="font-semibold">Grade distribution (subject grades)</h2><div className="mt-3 space-y-2">{stats.grades.map(([g,n]) => <div key={g} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm"><span className="font-semibold">{g}</span><span>{n}</span></div>)}</div></div></div></> : kind === 'grade-sheets' ? <div className="space-y-5">{rows.map((r, i) => <article key={`${rollOf(r)}-${i}`} className="break-inside-avoid rounded-xl border bg-white p-6 shadow-sm"><div className="border-b pb-4 text-center"><h2 className="text-lg font-bold">{selected.program} SEMESTER {selected.semester} GRADE SHEET</h2><p className="text-sm text-gray-500">Batch {selected.batch || '-'} · Calculation {selected.id}</p></div><dl className="my-4 grid gap-2 text-sm sm:grid-cols-3"><div><dt className="text-gray-500">Student Name</dt><dd className="font-semibold">{nameOf(r)}</dd></div><div><dt className="text-gray-500">College Roll</dt><dd className="font-semibold">{rollOf(r)}</dd></div><div><dt className="text-gray-500">Department / Course</dt><dd className="font-semibold">{deptOf(r)}</dd></div></dl><table className="w-full border-collapse text-sm"><thead><tr className="bg-gray-50"><th className="border p-2 text-left">Paper</th><th className="border p-2 text-left">Subject</th><th className="border p-2">Marks</th><th className="border p-2">Full Marks</th><th className="border p-2">Grade</th><th className="border p-2">GP</th><th className="border p-2">Credit</th><th className="border p-2">CP</th></tr></thead><tbody>{subjectsOf(r).map((s,j) => <tr key={j}><td className="border p-2">{s.paperCode || j + 1}</td><td className="border p-2">{s.subjectName || s.subject || '-'}</td><td className="border p-2 text-center">{s.marks ?? 0}</td><td className="border p-2 text-center">{s.fullMark ?? '-'}</td><td className="border p-2 text-center">{s.grade || '-'}</td><td className="border p-2 text-center">{s.gradePoint ?? '-'}</td><td className="border p-2 text-center">{s.credit ?? '-'}</td><td className="border p-2 text-center">{s.creditPoint ?? '-'}</td></tr>)}</tbody></table><div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5"><div>Total: <strong>{totalOf(r)} / {maxOf(r)}</strong></div><div>Credits: <strong>{r.totalCredits ?? '-'}</strong></div><div>Credit Points: <strong>{r.totalCreditPoints ?? '-'}</strong></div><div>SGPA: <strong>{r.sgpa ?? '-'}</strong></div><div>Status: <strong>{statusOf(r)}</strong></div></div></article>)}</div> : <div className="rounded-xl border bg-white p-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Consolidated tabular register</h2><span className="text-sm text-gray-500">{rows.length} row(s)</span></div><div className="overflow-x-auto"><table className="w-full min-w-max border-collapse text-left text-xs"><thead><tr className="bg-gray-100"><th className="border p-2">#</th><th className="border p-2">Roll</th><th className="border p-2">Student</th><th className="border p-2">Department</th>{paperColumns.map((p) => <th key={p} className="border p-2">{p}</th>)}<th className="border p-2">Total</th><th className="border p-2">SGPA</th><th className="border p-2">Status</th></tr></thead><tbody>{rows.map((r,i) => <tr key={`${rollOf(r)}-${i}`}><td className="border p-2">{i+1}</td><td className="border p-2">{rollOf(r)}</td><td className="border p-2">{nameOf(r)}</td><td className="border p-2">{deptOf(r)}</td>{paperColumns.map((p) => { const s = subjectsOf(r).find((x) => String(x.subjectName || x.subject || x.paperCode || 'Paper') === p); return <td key={p} className="border p-2">{s ? `${s.marks ?? 0} ${s.grade ? `(${s.grade})` : ''}` : '—'}</td>; })}<td className="border p-2">{totalOf(r)}/{maxOf(r)}</td><td className="border p-2">{r.sgpa ?? '-'}</td><td className="border p-2">{statusOf(r)}</td></tr>)}</tbody></table></div></div>}
-    </>}
-  </div><style jsx global>{`@media print { body { background: white !important; } aside, nav, button, select, input, header p { display: none !important; } main, section { padding: 0 !important; margin: 0 !important; } article, .rounded-xl { box-shadow: none !important; break-inside: avoid; } table { font-size: 9px !important; } }`}</style></section>;
+
+    <style jsx global>{`
+      @media print {
+        body {
+          background: white !important;
+        }
+        aside,
+        nav,
+        button,
+        select,
+        input,
+        header p {
+          display: none !important;
+        }
+        main,
+        section {
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        article,
+        .rounded-xl {
+          box-shadow: none !important;
+          break-inside: avoid;
+        }
+        table {
+          font-size: 9px !important;
+        }
+      }
+    `}</style>
+  </section>
+);
 }

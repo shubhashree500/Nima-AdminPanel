@@ -1,7 +1,7 @@
 {
-  "college": "Your College Name",
+  "college": "Nimapara Autonomous College",
   "max": 100,
-  "pass": 35,
+  "pass": 40,
   "subjects": {
     "UG|1": [
       "Physics",
@@ -166,7 +166,32 @@
   },
   "students": [],
   "marks": {},
-  "examSessions": [],
+  "examSessions": [
+    {
+      "id": "EXAM-1791810350506",
+      "academicYear": "2024-25",
+      "batch": 2024,
+      "program": "UG",
+      "course": "BA",
+      "semester": 3,
+      "examType": "Regular",
+      "status": "Draft",
+      "createdAt": "2026-10-12T13:05:50.507Z",
+      "updatedAt": "2026-10-12T13:05:50.507Z"
+    },
+    {
+      "id": "EXAM-1791871410241",
+      "academicYear": "2025-26",
+      "batch": 2025,
+      "program": "PG",
+      "department": "Odia",
+      "semester": 1,
+      "examType": "Regular",
+      "status": "Draft",
+      "createdAt": "2026-10-13T06:03:30.241Z",
+      "updatedAt": "2026-10-13T06:03:30.242Z"
+    }
+  ],
   "calculatedResults": [
     {
       "id": "CALC-1791441896927",
@@ -57510,7 +57535,7 @@
     },
     {
       "id": "CALC-1791529416134",
-      "status": "calculated",
+      "status": "published",
       "createdAt": "2026-10-09T07:03:36.133Z",
       "program": "UG",
       "semester": 3,
@@ -241743,11 +241768,24 @@
           "usedGrace": 0,
           "remainingGrace": 8
         }
+      ],
+      "updatedAt": "2026-10-12T13:06:07.855Z",
+      "statusHistory": [
+        {
+          "from": "calculated",
+          "to": "verified",
+          "at": "2026-10-12T13:05:52.042Z"
+        },
+        {
+          "from": "verified",
+          "to": "published",
+          "at": "2026-10-12T13:06:07.855Z"
+        }
       ]
     },
     {
       "id": "CALC-1791613865016",
-      "status": "calculated",
+      "status": "verified",
       "createdAt": "2026-10-10T06:31:05.016Z",
       "program": "UG",
       "semester": 3,
@@ -425979,6 +426017,14 @@
           "percentage": 57.83,
           "usedGrace": 0,
           "remainingGrace": 8
+        }
+      ],
+      "updatedAt": "2026-10-12T13:07:21.194Z",
+      "statusHistory": [
+        {
+          "from": "calculated",
+          "to": "verified",
+          "at": "2026-10-12T13:07:21.194Z"
         }
       ]
     },
@@ -630499,5 +630545,30 @@
         }
       ]
     }
-  ]
+  ],
+  "recheckingApplications": [
+    {
+      "id": "RECHECK-1791810352876",
+      "studentRoll": "BA24-003",
+      "studentName": "BISWARANJAN SAHOO",
+      "program": "UG",
+      "semester": 3,
+      "batch": "2024",
+      "paperCode": "Major-CP-5",
+      "reason": "Total marks re-addition request",
+      "requestedMarks": 80,
+      "status": "Submitted",
+      "decisionNotes": "",
+      "createdAt": "2026-10-12T13:05:52.876Z",
+      "updatedAt": "2026-10-12T13:05:52.876Z"
+    }
+  ],
+  "masterData": {
+    "courses": [
+      "BA"
+    ],
+    "departments": [],
+    "batches": [],
+    "subjects": []
+  }
 }

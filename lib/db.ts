@@ -47,8 +47,17 @@ export function getDB(): DBData {
     const parsed = JSON.parse(raw);
 
     // Keep compatibility with older db.json files
+        // Keep compatibility with older db.json files.
     if (!parsed.examSessions) {
       parsed.examSessions = [];
+    }
+
+    if (!Array.isArray(parsed.recheckingApplications)) {
+      parsed.recheckingApplications = [];
+    }
+
+    if (!Array.isArray(parsed.resultCorrections)) {
+      parsed.resultCorrections = [];
     }
 
     return parsed;

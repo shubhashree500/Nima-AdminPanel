@@ -145,8 +145,8 @@ export async function PUT(request: Request) {
         const matches = session.program === record.program &&
           Number(session.semester) === Number(record.semester) &&
           String(session.batch || '') === String(record.batch || '') &&
-          String(session.course || '') === String(record.course || '') &&
-          String(session.department || '') === String(record.department || '');
+          (!session.course || !record.course || record.course === 'AUTO' || String(session.course) === String(record.course)) &&
+          (!session.department || !record.department || record.department === 'AUTO' || String(session.department) === String(record.department));
         return matches
           ? { ...session, status: 'Published', updatedAt: record.updatedAt }
           : session;
