@@ -266,7 +266,7 @@ export function VerifyView() {
                   </thead>
                   <tbody>
                     {(selected.results || []).slice(0, 50).map((student, index) => (
-                      <tr key={student.id || student.roll || index}>
+                      <tr key={`verify-student-${student.id || student.roll || index}-${index}`}>
                         <td className="border p-3">{index + 1}</td>
                         <td className="border p-3">
                           {student.name ||

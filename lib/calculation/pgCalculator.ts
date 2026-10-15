@@ -405,6 +405,156 @@ function getPaperMarks(
   midsem: ParsedMark;
   final: ParsedMark;
 } {
+  /*
+    1. Structured courses/papers/subjects array
+  */
+  const courseList = Array.isArray(student?.courses)
+    ? student.courses
+    : Array.isArray(student?.Papers)
+    ? student.Papers
+    : Array.isArray(student?.subjects)
+    ? student.subjects
+    : null;
+
+  if (courseList && courseList.length > 0) {
+    const paperCodeClean = String(paper.code || '')
+      .trim()
+      .toLowerCase();
+    const paperTitleClean = String(paper.title || '')
+      .trim()
+      .toLowerCase();
+
+    const found =
+      courseList.find((c: any) => {
+        const rawCode = String(
+          c?.paper?.code || c?.code || c?.paper || c?.Paper || '',
+        )
+          .trim()
+          .toLowerCase();
+        const strippedCode = rawCode.replace(/^paper\s*[-:]?\s*/, '');
+        if (
+          rawCode === paperCodeClean ||
+          strippedCode === paperCodeClean ||
+          strippedCode === paperCodeClean.replace(/^paper\s*[-:]?\s*/, '')
+        ) {
+          return true;
+        }
+
+        const rawTitle = String(
+          c?.paper?.title || c?.title || c?.subjectName || '',
+        )
+          .trim()
+          .toLowerCase();
+        if (
+          rawTitle &&
+          paperTitleClean &&
+          (rawTitle === paperTitleClean ||
+            paperTitleClean.includes(rawTitle) ||
+            rawTitle.includes(paperTitleClean))
+        ) {
+          return true;
+        }
+
+        return false;
+      }) ?? courseList[paperIndex];
+
+    if (found) {
+      if (paper.type === 'practical') {
+        const practicalValue =
+          found.practical ??
+          found.practicalMark ??
+          found.finalMark ??
+          found.endsem ??
+          found.FinalMark ??
+          found['Final-Mark'] ??
+          found.totalMark ??
+          found.marks;
+
+        return {
+          midsem: { type: 'other' },
+          final: parseMark(practicalValue),
+        };
+      }
+
+      const midVal =
+        found.midsemMark ??
+        found.midsem ??
+        found.MidsemMark ??
+        found['Midsem-Mark'];
+      const finalVal =
+        found.finalMark ??
+        found.endsem ??
+        found.FinalMark ??
+        found['Final-Mark'] ??
+        found.marks;
+
+      return {
+        midsem: parseMark(midVal),
+        final: parseMark(finalVal),
+      };
+    }
+  }
+
+  /*
+    2. Structured subjects object (keyed by paper code or title)
+  */
+  if (
+    student?.subjects &&
+    typeof student.subjects === 'object' &&
+    !Array.isArray(student.subjects)
+  ) {
+    const entry =
+      student.subjects[paper.code] ??
+      student.subjects[paper.title] ??
+      student.subjects[`Paper ${paper.code}`];
+
+    if (entry !== undefined && entry !== null) {
+      if (typeof entry === 'number' || typeof entry === 'string') {
+        return {
+          midsem: { type: 'other' },
+          final: parseMark(entry),
+        };
+      }
+
+      if (paper.type === 'practical') {
+        const practicalValue =
+          entry.practical ??
+          entry.practicalMark ??
+          entry.finalMark ??
+          entry.endsem ??
+          entry.FinalMark ??
+          entry['Final-Mark'] ??
+          entry.totalMark ??
+          entry.marks;
+
+        return {
+          midsem: { type: 'other' },
+          final: parseMark(practicalValue),
+        };
+      }
+
+      const midVal =
+        entry.midsemMark ??
+        entry.midsem ??
+        entry.MidsemMark ??
+        entry['Midsem-Mark'];
+      const finalVal =
+        entry.finalMark ??
+        entry.endsem ??
+        entry.FinalMark ??
+        entry['Final-Mark'] ??
+        entry.marks;
+
+      return {
+        midsem: parseMark(midVal),
+        final: parseMark(finalVal),
+      };
+    }
+  }
+
+  /*
+    3. Flat Excel column mappings
+  */
   const mappings =
     PG_FIELD_MAPPINGS[department] ?? [];
 
@@ -706,12 +856,17 @@ export function calculatePGStudent(
     );
 
   /* -------------------------------------------------------
-     SGPA
+     SGPA & PERCENTAGE
      ------------------------------------------------------- */
+
+  const round2 = (val: number) => Math.round(val * 100) / 100;
+
+  const roundedGrandTotal = round2(grandTotal);
+  const roundedCreditPoints = round2(totalCreditPoints);
 
   const sgpa =
     totalCredits > 0
-      ? totalCreditPoints / totalCredits
+      ? round2(roundedCreditPoints / totalCredits)
       : 0;
 
   /* -------------------------------------------------------
@@ -720,7 +875,7 @@ export function calculatePGStudent(
 
   const percentage =
     totalMaximumMarks > 0
-      ? (grandTotal / totalMaximumMarks) * 100
+      ? round2((roundedGrandTotal / totalMaximumMarks) * 100)
       : 0;
 
   /* -------------------------------------------------------

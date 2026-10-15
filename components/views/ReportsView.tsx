@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 type ReportKind = 'grade-sheets' | 'tabular-register' | 'statistics';
-type Calculation = { id: string; program: string; semester: number; batch?: string | number; course?: string; department?: string; count?: number; status?: string; createdAt?: string; results?: any[]; departments?: any[] };
+type Calculation = { id: string; program: string; semester: number; batch?: string | number; course?: string; department?: string; count?: number; status?: string; createdAt?: string; results?: any[]; hasRevisions?: boolean; departments?: any[] };
 
 function identity(result: any) { return result?.student || result || {}; }
 function rollOf(result: any) { const s = identity(result); return s['College Roll No'] || s['College Roll No.'] || s['Roll No'] || s['College Roll'] || s.collegeRollNo || s.roll || s.rollNo || s['Autonomous Roll No'] || s.autonomousRollNo || '-'; }
@@ -22,6 +23,7 @@ export function ReportsView({ kind }: { kind: ReportKind }) {
   const [selectedId, setSelectedId] = useState('');
   const [department, setDepartment] = useState('All');
   const [search, setSearch] = useState('');
+  const [revisedOnly, setRevisedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
@@ -40,8 +42,23 @@ export function ReportsView({ kind }: { kind: ReportKind }) {
   useEffect(() => { void load(); }, [load]);
 
   const selected = records.find((r) => r.id === selectedId);
+  const hasRevisedStudents = useMemo(
+    () => (selected?.results || []).some((r: any) => r.isRevised === true),
+    [selected]
+  );
   const departments = useMemo(() => ['All', ...Array.from(new Set((selected?.results || []).map(deptOf).filter((x) => x && x !== '-'))).sort()], [selected]);
-  const rows = useMemo(() => (selected?.results || []).filter((r) => (department === 'All' || deptOf(r) === department) && `${nameOf(r)} ${rollOf(r)} ${deptOf(r)}`.toLowerCase().includes(search.toLowerCase())), [selected, department, search]);
+  const rows = useMemo(
+    () =>
+      (selected?.results || []).filter(
+        (r) =>
+          (department === 'All' || deptOf(r) === department) &&
+          (!revisedOnly || r.isRevised === true) &&
+          `${nameOf(r)} ${rollOf(r)} ${deptOf(r)}`
+            .toLowerCase()
+            .includes(search.toLowerCase())
+      ),
+    [selected, department, search, revisedOnly]
+  );
   const paperColumns = useMemo(() => Array.from(new Set((selected?.results || []).flatMap((r) => subjectsOf(r).map((s) => String(s.subjectName || s.subject || s.paperCode || 'Paper'))))), [selected]);
   const stats = useMemo(() => {
     const all = selected?.results || [];
@@ -911,152 +928,296 @@ const exportResultStatisticsPdf = () => {
     if (!selected) return;
     let matrix: unknown[][];
     if (kind === 'tabular-register') {
-      matrix = [['No.', 'College Roll', 'Student Name', 'Department', ...paperColumns, 'Total', 'Full Marks', 'Credits', 'SGPA', 'Percentage', 'Status'], ...rows.map((r, i) => [i + 1, rollOf(r), nameOf(r), deptOf(r), ...paperColumns.map((paper) => { const subject = subjectsOf(r).find((s) => String(s.subjectName || s.subject || s.paperCode || 'Paper') === paper); return subject ? `${subject.marks ?? 0}/${subject.fullMark ?? 0} ${subject.grade || ''}` : ''; }), totalOf(r), maxOf(r), r.totalCredits ?? '', r.sgpa ?? '', r.percentage ?? '', statusOf(r)])];
+      matrix = [['No.', 'College Roll', 'Student Name', 'Department', ...paperColumns, 'Total', 'Full Marks', 'Credits', 'SGPA', 'Percentage', 'Status', 'Revised'], ...rows.map((r, i) => [i + 1, rollOf(r), nameOf(r), deptOf(r), ...paperColumns.map((paper) => { const subject = subjectsOf(r).find((s) => String(s.subjectName || s.subject || s.paperCode || 'Paper') === paper); return subject ? `${subject.marks ?? 0}/${subject.fullMark ?? 0} ${subject.grade || ''}` : ''; }), totalOf(r), maxOf(r), r.totalCredits ?? '', r.sgpa ?? '', r.percentage ?? '', statusOf(r), r.isRevised ? 'YES' : 'NO'])];
     } else if (kind === 'statistics') {
       matrix = [['Department', 'Students', 'Passed', 'Failed', 'Pass Percentage'], ...stats.byDept.map(([d, v]) => [d, v.students, v.passed, v.failed, v.students ? `${(v.passed / v.students * 100).toFixed(2)}%` : '0%'])];
     } else {
-      matrix = [['No.', 'College Roll', 'Student Name', 'Department', 'Paper Code', 'Subject', 'Marks', 'Full Marks', 'Grade', 'Grade Point', 'Credit', 'Credit Point', 'SGPA', 'Percentage', 'Status'], ...rows.flatMap((r, i) => subjectsOf(r).map((s) => [i + 1, rollOf(r), nameOf(r), deptOf(r), s.paperCode || '', s.subjectName || s.subject || '', s.marks ?? 0, s.fullMark ?? 0, s.grade || '', s.gradePoint ?? '', s.credit ?? '', s.creditPoint ?? '', r.sgpa ?? '', r.percentage ?? '', statusOf(r)]))];
+      matrix = [['No.', 'College Roll', 'Student Name', 'Department', 'Paper Code', 'Subject', 'Marks', 'Full Marks', 'Grade', 'Grade Point', 'Credit', 'Credit Point', 'SGPA', 'Percentage', 'Status', 'Revised'], ...rows.flatMap((r, i) => subjectsOf(r).map((s) => [i + 1, rollOf(r), nameOf(r), deptOf(r), s.paperCode || '', s.subjectName || s.subject || '', s.marks ?? 0, s.fullMark ?? 0, s.grade || '', s.gradePoint ?? '', s.credit ?? '', s.creditPoint ?? '', r.sgpa ?? '', r.percentage ?? '', statusOf(r), r.isRevised ? 'YES' : 'NO']))];
     }
     const content = '\ufeff' + matrix.map((line) => line.map(csvEscape).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }));
-    const a = document.createElement('a'); a.href = url; a.download = `${kind}-${selected.program}-sem${selected.semester}-batch${selected.batch || 'NA'}.csv`; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.href = url;
+    const revTag = (selected.hasRevisions || rows.some((r) => r.isRevised)) ? 'REVISED-' : '';
+    a.download = `${revTag}${kind}-${selected.program}-sem${selected.semester}-batch${selected.batch || 'NA'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = () => {
+    if (!selected) return;
+    let matrix: unknown[][];
+    if (kind === 'tabular-register') {
+      matrix = [
+        ['No.', 'College Roll', 'Student Name', 'Department', ...paperColumns, 'Total', 'Full Marks', 'Credits', 'SGPA', 'Percentage', 'Status', 'Revised'],
+        ...rows.map((r, i) => [
+          i + 1,
+          rollOf(r),
+          nameOf(r),
+          deptOf(r),
+          ...paperColumns.map((paper) => {
+            const subject = subjectsOf(r).find((s) => String(s.subjectName || s.subject || s.paperCode || 'Paper') === paper);
+            return subject ? `${subject.marks ?? 0}/${subject.fullMark ?? 0} ${subject.grade || ''}` : '';
+          }),
+          totalOf(r),
+          maxOf(r),
+          r.totalCredits ?? '',
+          r.sgpa ?? '',
+          r.percentage ?? '',
+          statusOf(r),
+          r.isRevised ? 'YES' : 'NO',
+        ]),
+      ];
+    } else if (kind === 'statistics') {
+      matrix = [
+        ['Department', 'Students', 'Passed', 'Failed', 'Pass Percentage'],
+        ...stats.byDept.map(([d, v]) => [d, v.students, v.passed, v.failed, v.students ? `${((v.passed / v.students) * 100).toFixed(2)}%` : '0%']),
+      ];
+    } else {
+      matrix = [
+        ['No.', 'College Roll', 'Student Name', 'Department', 'Paper Code', 'Subject', 'Marks', 'Full Marks', 'Grade', 'Grade Point', 'Credit', 'Credit Point', 'SGPA', 'Percentage', 'Status', 'Revised'],
+        ...rows.flatMap((r, i) =>
+          subjectsOf(r).map((s) => [
+            i + 1,
+            rollOf(r),
+            nameOf(r),
+            deptOf(r),
+            s.paperCode || '',
+            s.subjectName || s.subject || '',
+            s.marks ?? 0,
+            s.fullMark ?? 0,
+            s.grade || '',
+            s.gradePoint ?? '',
+            s.credit ?? '',
+            s.creditPoint ?? '',
+            r.sgpa ?? '',
+            r.percentage ?? '',
+            statusOf(r),
+            r.isRevised ? 'YES' : 'NO',
+          ])
+        ),
+      ];
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(matrix);
+    const wb = XLSX.utils.book_new();
+    const sheetName = kind === 'tabular-register' ? 'TabularRegister' : kind === 'statistics' ? 'ResultStatistics' : 'GradeSheets';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const revTag = (selected.hasRevisions || rows.some((r) => r.isRevised)) ? 'REVISED-' : '';
+    XLSX.writeFile(wb, `${revTag}${kind}-${selected.program}-sem${selected.semester}-batch${selected.batch || 'NA'}.xlsx`);
+  };
+
+  const exportSingleGradeSheetPdf = (r: any) => {
+    if (!selected) return;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const isRev = r.isRevised === true;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(isRev ? 'REVISED SEMESTER GRADE SHEET' : 'SEMESTER GRADE SHEET', 105, 18, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${selected.program} SEMESTER ${selected.semester} EXAMINATION (${selected.batch || ''})`, 105, 25, { align: 'center' });
+
+    // Student Info
+    doc.setFontSize(9);
+    doc.text(`Roll No: ${rollOf(r)}`, 14, 35);
+    doc.text(`Student Name: ${nameOf(r)}`, 14, 41);
+    doc.text(`Department / Course: ${deptOf(r)}`, 14, 47);
+    if (isRev) {
+      doc.setTextColor(180, 0, 0);
+      doc.text(`* REVISED RESULT (After Rechecking / Revaluation)`, 14, 53);
+      doc.setTextColor(0, 0, 0);
+    }
+
+    const tableData = subjectsOf(r).map((s, idx) => [
+      s.paperCode || idx + 1,
+      s.subjectName || s.subject || '-',
+      s.marks ?? 0,
+      s.fullMark ?? '-',
+      s.grade || '-',
+      s.gradePoint ?? '-',
+      s.credit ?? '-',
+      s.creditPoint ?? '-',
+    ]);
+
+    autoTable(doc, {
+      startY: isRev ? 57 : 52,
+      head: [['Paper Code', 'Subject Title', 'Marks', 'Full Marks', 'Grade', 'GP', 'Credit', 'Credit Points']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [40, 50, 70], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 8.5, halign: 'center' },
+      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } },
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 8;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total Marks: ${totalOf(r)} / ${maxOf(r)}`, 14, finalY);
+    doc.text(`Total Credits: ${r.totalCredits ?? '-'}`, 70, finalY);
+    doc.text(`Total Credit Points: ${r.totalCreditPoints ?? '-'}`, 120, finalY);
+    doc.text(`SGPA: ${r.sgpa ?? '-'}`, 14, finalY + 6);
+    doc.text(`Percentage: ${r.percentage ? Number(r.percentage).toFixed(2) + '%' : '-'}`, 70, finalY + 6);
+    doc.text(`Result: ${statusOf(r)}`, 120, finalY + 6);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Controller of Examinations', 196, finalY + 28, { align: 'right' });
+    doc.save(`GradeSheet-${rollOf(r)}${isRev ? '-REVISED' : ''}.pdf`);
   };
 
   const title = kind === 'grade-sheets' ? 'Grade Sheets' : kind === 'tabular-register' ? 'Tabular Register' : 'Result Statistics';
 
-  
-return (
-  <section className="min-h-screen bg-gray-50 p-6">
-    <div className="mx-auto max-w-7xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Reports are generated from saved calculation records. Confirm the record status before using a report as an official document.
-        </p>
-      </header>
-
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
-          <label className="text-sm font-medium text-gray-700">
-            Calculation
-            <select
-              className="mt-2 w-full rounded-lg border p-3"
-              value={selectedId}
-              onChange={(e) => {
-                setSelectedId(e.target.value);
-                setDepartment('All');
-              }}
-              disabled={loading}
-            >
-              <option value="">-- Select calculation --</option>
-              {records.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.program} | Sem {r.semester} | Batch {r.batch || '-'} |{' '}
-                  {r.count ?? r.results?.length ?? 0} students |{' '}
-                  {r.status || 'calculated'}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm font-medium text-gray-700">
-            Department
-            <select
-              className="mt-2 w-full rounded-lg border p-3"
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-            >
-              {departments.map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </select>
-          </label>
-
-          {kind !== 'statistics' && (
-            <label className="text-sm font-medium text-gray-700">
-              Search student
-              <input
-                className="mt-2 w-full rounded-lg border p-3"
-                placeholder="Name or roll number"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-          )}
-        </div>
-
-        {message && (
-          <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
-            {message}
+  return (
+    <section className="min-h-screen bg-gray-50 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header>
+          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Reports are generated from saved calculation records. Confirm the record status before using a report as an official document.
           </p>
-        )}
+        </header>
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            onClick={() => void load()}
-            disabled={loading}
-            className="rounded-lg border px-4 py-2 text-sm font-semibold"
-          >
-            Refresh
-          </button>
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <label className="text-sm font-medium text-gray-700">
+              Calculation
+              <select
+                className="mt-2 w-full rounded-lg border p-3"
+                value={selectedId}
+                onChange={(e) => {
+                  setSelectedId(e.target.value);
+                  setDepartment('All');
+                }}
+                disabled={loading}
+              >
+                <option value="">-- Select calculation --</option>
+                {records.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.program} | Sem {r.semester} | Batch {r.batch || '-'} |{' '}
+                    {r.count ?? r.results?.length ?? 0} students |{' '}
+                    {r.status || 'calculated'}
+                    {r.hasRevisions ? ' (Revised)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-         
-<button
-  onClick={exportCsv}
-  disabled={!selected || loading}
-  className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
->
-  Export CSV
-</button>
+            <label className="text-sm font-medium text-gray-700">
+              Department
+              <select
+                className="mt-2 w-full rounded-lg border p-3"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+              >
+                {departments.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </select>
+            </label>
 
-{/* Download Result Statistics PDF */}
-{kind === 'statistics' && (
-  <button
-    onClick={exportResultStatisticsPdf}
-    disabled={!selected || loading || !selected.results?.length}
-    className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-  >
-    Download 
-  </button>
-)}
+            {kind !== 'statistics' && (
+              <label className="text-sm font-medium text-gray-700">
+                Search student
+                <input
+                  className="mt-2 w-full rounded-lg border p-3"
+                  placeholder="Name or roll number"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+            )}
+          </div>
 
-{kind === 'tabular-register' && (
-  <button
-    onClick={exportTabularRegisterPdf}
-    disabled={!selected || loading || rows.length === 0}
-    className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-  >
-    Download TR PDF
-  </button>
-)}
-
-          {kind === 'tabular-register' && (
-            <button
-              onClick={exportTabularRegisterPdf}
-              disabled={!selected || loading || rows.length === 0}
-              className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              Download TR PDF
-            </button>
+          {/* Revised Filter Toggle */}
+          {hasRevisedStudents && (
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-purple-50 p-3 text-sm text-purple-900 border border-purple-200">
+              <label className="flex items-center gap-2 font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded text-purple-600"
+                  checked={revisedOnly}
+                  onChange={(e) => setRevisedOnly(e.target.checked)}
+                />
+                Show Revised Students Only
+              </label>
+              <span className="text-xs text-purple-700">
+                (This calculation contains results updated via rechecking / scrutiny)
+              </span>
+            </div>
           )}
 
-          <button
-            onClick={() => window.print()}
-            disabled={!selected}
-            className="rounded-lg border px-4 py-2 text-sm font-semibold"
-          >
-            Print / Save PDF
-          </button>
-        </div>
-      </div>
+          {message && (
+            <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
+              {message}
+            </p>
+          )}
 
-      {loading ? (
-        <p className="text-sm text-gray-600">Loading saved results…</p>
-      ) : !selected ? (
-        <div className="rounded-xl border bg-white p-6 text-sm text-gray-600">
-          No saved calculations found. Calculate a result first.
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              onClick={() => void load()}
+              disabled={loading}
+              className="rounded-lg border px-4 py-2 text-sm font-semibold"
+            >
+              Refresh
+            </button>
+
+            <button
+              onClick={exportCsv}
+              disabled={!selected || loading}
+              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Export CSV
+            </button>
+
+            <button
+              onClick={exportExcel}
+              disabled={!selected || loading}
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Export Excel (.xlsx)
+            </button>
+
+            {/* Download Result Statistics PDF */}
+            {kind === 'statistics' && (
+              <button
+                onClick={exportResultStatisticsPdf}
+                disabled={!selected || loading || !selected.results?.length}
+                className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Download RS PDF
+              </button>
+            )}
+
+            {kind === 'tabular-register' && (
+              <button
+                onClick={exportTabularRegisterPdf}
+                disabled={!selected || loading || rows.length === 0}
+                className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Download TR PDF
+              </button>
+            )}
+
+          
+            <button
+              onClick={() => window.print()}
+              disabled={!selected}
+              className="rounded-lg border px-4 py-2 text-sm font-semibold"
+            >
+              Print / Save PDF
+            </button>
+          </div>
         </div>
-      ) : (
+
+        {loading ? (
+          <p className="text-sm text-gray-600">
+            Loading saved results…
+          </p>
+        ) : !selected ? (
+          <div className="rounded-xl border bg-white p-6 text-sm text-gray-600">
+            No saved calculations found. Calculate a result first.
+          </div>
+        ) : (
+
         <>
           <div className="rounded-xl border bg-white p-4 text-sm">
             <div className="flex flex-wrap justify-between gap-3">
@@ -1174,14 +1335,29 @@ return (
                   key={`${rollOf(r)}-${i}`}
                   className="break-inside-avoid rounded-xl border bg-white p-6 shadow-sm"
                 >
-                  <div className="border-b pb-4 text-center">
-                    <h2 className="text-lg font-bold">
-                      {selected.program} SEMESTER {selected.semester} GRADE
-                      SHEET
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      Batch {selected.batch || '-'} · Calculation {selected.id}
-                    </p>
+                  <div className="flex flex-wrap items-center justify-between border-b pb-4 gap-2">
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold">
+                          {selected.program} SEMESTER {selected.semester} GRADE
+                          SHEET
+                        </h2>
+                        {r.isRevised && (
+                          <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-800">
+                            REVISED
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        Batch {selected.batch || '-'} · Calculation {selected.id}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => exportSingleGradeSheetPdf(r)}
+                      className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
+                    >
+                      Download PDF
+                    </button>
                   </div>
 
                   <dl className="my-4 grid gap-2 text-sm sm:grid-cols-3">
@@ -1296,7 +1472,16 @@ return (
                     {rows.map((r, i) => (
                       <tr key={`${rollOf(r)}-${i}`}>
                         <td className="border p-2">{i + 1}</td>
-                        <td className="border p-2">{rollOf(r)}</td>
+                        <td className="border p-2">
+                          <div className="flex items-center gap-1 font-medium">
+                            {rollOf(r)}
+                            {r.isRevised && (
+                              <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-bold text-purple-800" title="Revised Result">
+                                REV
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="border p-2">{nameOf(r)}</td>
                         <td className="border p-2">{deptOf(r)}</td>
 

@@ -2,35 +2,54 @@ import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
 import { calculateResults } from '@/lib/resultEngine';
 import { getResultConfig } from '@/lib/configs';
-
-const COMPONENTS: Record<string, { key: string; configKey: string }> = {
-  midsem: { key: 'MidsemMark', configKey: 'midsem' },
-  endsem: { key: 'FinalMark', configKey: 'endsem' },
-  final: { key: 'FinalMark', configKey: 'endsem' },
-  attendance: { key: 'Attandance', configKey: 'attendance' },
-  surpriseTest: { key: 'SurpriseTest', configKey: 'surpriseTest' },
-  assignment: { key: 'Assignment', configKey: 'assignment' },
-  practical: { key: 'PracticalMark', configKey: 'practical' },
-  internalPractical: {
-    key: 'I-Practical',
-    configKey: 'internalPractical',
-  },
-};
+import type { PaperConfig, CourseConfig } from '@/lib/configs/types';
+import {
+  RECHECKING_COMPONENTS,
+  DEFAULT_RECHECKING_CONFIG,
+  normalizeComponentName,
+  getComponentMaxMark,
+  validateRecheckingMarkChange,
+} from '@/lib/rules/rechecking';
 
 function text(value: unknown): string {
   return String(value ?? '').trim();
 }
 
 function rollOf(result: any): string {
-  const student = result?.student ?? {};
-
+  const student = result?.student ?? result ?? {};
   return text(
     student['Roll No'] ??
       student['Roll No.'] ??
       student.rollNo ??
       student.roll ??
       student['College Roll No'] ??
-      student['College Roll No.']
+      student['College Roll No.'] ??
+      student.collegeRollNo ??
+      student['Autonomous Roll No'] ??
+      student.autonomousRollNo
+  );
+}
+
+function nameOf(result: any): string {
+  const student = result?.student ?? result ?? {};
+  return text(
+    student['Applicant Name'] ??
+      student['Name of the Students'] ??
+      student['Student Name'] ??
+      student.name ??
+      student.studentName ??
+      rollOf(result)
+  );
+}
+
+function deptOf(result: any): string {
+  const student = result?.student ?? result ?? {};
+  return text(
+    student.Department ??
+      student.department ??
+      student.course ??
+      student['Department Name'] ??
+      '-'
   );
 }
 
@@ -45,6 +64,339 @@ function errorResponse(message: string, status: number) {
   );
 }
 
+function extractStudentPaperComponents(studentResult: any, paper: PaperConfig) {
+  const sourceStudent = studentResult?.student ?? studentResult ?? {};
+  const subjectsMap = sourceStudent.subjects;
+  const coursesList = Array.isArray(sourceStudent.courses)
+    ? sourceStudent.courses
+    : Array.isArray(sourceStudent.Papers)
+    ? sourceStudent.Papers
+    : null;
+
+  let midsem: number | null = null;
+  let endsem: number | null = null;
+  let practical: number | null = null;
+  let attendance: number | null = null;
+  let surpriseTest: number | null = null;
+  let assignment: number | null = null;
+
+  const toNum = (v: any): number | null =>
+    v !== undefined && v !== null && text(v) !== '' && Number.isFinite(Number(v))
+      ? Number(v)
+      : null;
+
+  // 1. Check subjects object (UG)
+  if (subjectsMap && typeof subjectsMap === 'object' && !Array.isArray(subjectsMap)) {
+    const entry =
+      subjectsMap[paper.code] ??
+      Object.entries(subjectsMap).find(
+        ([k]) => k.toLowerCase() === paper.code.toLowerCase()
+      )?.[1];
+
+    if (entry && typeof entry === 'object') {
+      midsem = toNum(entry.MidsemMark ?? entry.midsemMark ?? entry.midsem);
+      endsem = toNum(entry.FinalMark ?? entry.finalMark ?? entry.endsem);
+      practical = toNum(entry.PracticalMark ?? entry.practicalMark ?? entry.practical);
+      attendance = toNum(entry.Attandance ?? entry.attendance);
+      surpriseTest = toNum(entry.SurpriseTest ?? entry.surpriseTest);
+      assignment = toNum(entry.Assignment ?? entry.assignment);
+    }
+  }
+
+  // 2. Check courses list (PG)
+  if (coursesList) {
+    const c = coursesList.find((item: any) => {
+      const raw = String(item?.paper?.code || item?.code || item?.paper || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^paper\s*/, '');
+      return raw === paper.code.toLowerCase().replace(/^paper\s*/, '');
+    });
+
+    if (c) {
+      if (c.midsemMark !== undefined || c.midsem !== undefined) {
+        midsem = toNum(c.midsemMark ?? c.midsem);
+      }
+      if (c.finalMark !== undefined || c.endsem !== undefined) {
+        endsem = toNum(c.finalMark ?? c.endsem);
+      }
+      if (c.practical !== undefined || c.practicalMark !== undefined) {
+        practical = toNum(c.practical ?? c.practicalMark);
+      }
+    }
+  }
+
+  // 3. Fallback to calculated subject in studentResult.subjects
+  const subResult = (studentResult.subjects || []).find(
+    (s: any) => paperCodeOf(s) === paper.code.toLowerCase()
+  );
+
+  if (subResult) {
+    if (endsem === null && midsem === null) {
+      endsem = toNum(subResult.marks);
+    }
+  }
+
+  return { midsem, endsem, practical, attendance, surpriseTest, assignment };
+}
+
+function applyComponentToStudent(
+  sourceStudent: any,
+  paper: PaperConfig,
+  componentName: string,
+  newValue: number
+) {
+  const norm = normalizeComponentName(componentName);
+  const updated = structuredClone(sourceStudent);
+
+  // If student has subjects object (UG)
+  if (
+    updated.subjects &&
+    typeof updated.subjects === 'object' &&
+    !Array.isArray(updated.subjects)
+  ) {
+    const matchedKey =
+      Object.keys(updated.subjects).find(
+        (k) => k.toLowerCase() === paper.code.toLowerCase()
+      ) || paper.code;
+
+    if (!updated.subjects[matchedKey] || typeof updated.subjects[matchedKey] !== 'object') {
+      updated.subjects[matchedKey] = {
+        code: paper.code,
+        paperCode: paper.code,
+        subject: paper.title,
+      };
+    }
+
+    if (norm === 'midsem') updated.subjects[matchedKey].MidsemMark = newValue;
+    else if (norm === 'endsem' || norm === 'final' || norm === 'sem')
+      updated.subjects[matchedKey].FinalMark = newValue;
+    else if (norm === 'practical')
+      updated.subjects[matchedKey].PracticalMark = newValue;
+    else if (norm === 'attendance')
+      updated.subjects[matchedKey].Attandance = newValue;
+    else if (norm === 'surpriseTest')
+      updated.subjects[matchedKey].SurpriseTest = newValue;
+    else if (norm === 'assignment')
+      updated.subjects[matchedKey].Assignment = newValue;
+  }
+
+  // If student has courses array (PG)
+  if (Array.isArray(updated.courses)) {
+    let course = updated.courses.find((item: any) => {
+      const raw = String(item?.paper?.code || item?.code || item?.paper || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^paper\s*/, '');
+      return raw === paper.code.toLowerCase().replace(/^paper\s*/, '');
+    });
+
+    if (!course) {
+      course = { paper: paper.code };
+      updated.courses.push(course);
+    }
+
+    if (norm === 'midsem') course.midsemMark = newValue;
+    else if (norm === 'endsem' || norm === 'final' || norm === 'sem')
+      course.finalMark = newValue;
+    else if (norm === 'practical') {
+      course.practical = newValue;
+      course.finalMark = newValue;
+    }
+  }
+
+  // If neither existed, create subjects object
+  if (!updated.subjects && !Array.isArray(updated.courses)) {
+    updated.subjects = {
+      [paper.code]: {
+        code: paper.code,
+        paperCode: paper.code,
+        subject: paper.title,
+        ...(norm === 'midsem' ? { MidsemMark: newValue } : {}),
+        ...(norm === 'endsem' || norm === 'final' || norm === 'sem'
+          ? { FinalMark: newValue }
+          : {}),
+        ...(norm === 'practical' ? { PracticalMark: newValue } : {}),
+        ...(norm === 'attendance' ? { Attandance: newValue } : {}),
+      },
+    };
+  }
+
+  return updated;
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const calculationId = searchParams.get('calculationId');
+    const studentRoll = searchParams.get('studentRoll');
+
+    if (!calculationId) {
+      return errorResponse('Calculation ID is required.', 400);
+    }
+
+    const db: any = getDB();
+    const records = Array.isArray(db.calculatedResults)
+      ? db.calculatedResults
+      : [];
+
+    const calculation = records.find((r: any) => r.id === calculationId);
+
+    if (!calculation) {
+      return errorResponse('Calculation record not found.', 404);
+    }
+
+    const results = Array.isArray(calculation.results) ? calculation.results : [];
+
+    if (!studentRoll) {
+      // Return student list for dropdown
+      const students = results.map((r: any) => ({
+        roll: rollOf(r),
+        name: nameOf(r),
+        department: deptOf(r),
+        sgpa: r.sgpa ?? '-',
+        status: (r.subjects || []).some((s: any) =>
+          ['F', 'AB', 'M'].includes(String(s?.grade || '').toUpperCase())
+        )
+          ? 'FAIL'
+          : 'PASS',
+      }));
+
+      return NextResponse.json({
+        success: true,
+        calculation: {
+          id: calculation.id,
+          program: calculation.program,
+          semester: calculation.semester,
+          batch: calculation.batch,
+          status: calculation.status,
+          totalStudents: results.length,
+        },
+        students,
+      });
+    }
+
+    // Locate single student
+    const studentResult = results.find(
+      (r: any) => rollOf(r).toLowerCase() === studentRoll.trim().toLowerCase()
+    );
+
+    if (!studentResult) {
+      return errorResponse('Student not found in this calculation.', 404);
+    }
+
+    const sourceStudent = studentResult?.student ?? studentResult;
+    const batch = Number(sourceStudent.batch ?? calculation.batch ?? 2025);
+    const semester = Number(calculation.semester);
+    const program = String(calculation.program).toUpperCase() as 'UG' | 'PG';
+    const course = text(sourceStudent.course ?? calculation.course);
+    const department = text(
+      sourceStudent.Department ??
+        sourceStudent.department ??
+        calculation.department
+    );
+
+    const config = getResultConfig({
+      program,
+      batch,
+      semester,
+      course: course || undefined,
+      department: department || undefined,
+    });
+
+    const papersConfig = config?.papers || [];
+
+    // Map each subject with component breakdowns
+    const papers = (studentResult.subjects || []).map((sub: any) => {
+      const pCode = text(sub.paperCode || sub.code);
+      const confPaper = papersConfig.find(
+        (p) => p.code.toLowerCase() === pCode.toLowerCase()
+      );
+
+      const paperObj = confPaper || {
+        code: pCode,
+        title: sub.subjectName || sub.title || pCode,
+        type: 'theory',
+        credit: sub.credit ?? 4,
+        marks: {
+          fullMark: sub.fullMark ?? 100,
+          endsem: { max: sub.fullMark ?? 100 },
+          midsem: { max: 20 },
+        },
+      };
+
+      const extracted = extractStudentPaperComponents(studentResult, paperObj as PaperConfig);
+
+      return {
+        code: pCode,
+        title: sub.subjectName || confPaper?.title || pCode,
+        category: sub.category || confPaper?.category || '',
+        type: confPaper?.type || (extracted.practical !== null ? 'practical' : 'theory'),
+        credit: sub.credit ?? confPaper?.credit ?? 0,
+        fullMark: sub.fullMark ?? confPaper?.marks.fullMark ?? 100,
+        marks: sub.marks ?? 0,
+        grade: sub.grade || '-',
+        gradePoint: sub.gradePoint ?? 0,
+        creditPoint: sub.creditPoint ?? 0,
+        grace: sub.grace ?? 0,
+        components: {
+          midsem: {
+            value: extracted.midsem,
+            max: getComponentMaxMark(paperObj as PaperConfig, 'midsem'),
+          },
+          sem: {
+            value: extracted.endsem,
+            max: getComponentMaxMark(paperObj as PaperConfig, 'endsem'),
+          },
+          practical: {
+            value: extracted.practical,
+            max: getComponentMaxMark(paperObj as PaperConfig, 'practical'),
+          },
+          attendance: {
+            value: extracted.attendance,
+            max: getComponentMaxMark(paperObj as PaperConfig, 'attendance'),
+          },
+        },
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      student: {
+        roll: rollOf(studentResult),
+        name: nameOf(studentResult),
+        department: deptOf(studentResult),
+        course: course || deptOf(studentResult),
+        program,
+        semester,
+        batch,
+        sgpa: studentResult.sgpa ?? '-',
+        percentage: studentResult.percentage ?? '-',
+        totalCredits: studentResult.totalCredits ?? '-',
+        totalCreditPoints: studentResult.totalCreditPoints ?? '-',
+        status: (studentResult.subjects || []).some((s: any) =>
+          ['F', 'AB', 'M'].includes(String(s?.grade || '').toUpperCase())
+        )
+          ? 'FAIL'
+          : 'PASS',
+        isRevised: studentResult.isRevised === true,
+      },
+      papers,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to fetch student details.',
+      },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -54,8 +406,8 @@ export async function POST(request: Request) {
     const paperCode = text(body.paperCode);
     const componentName = text(body.component);
     const reason = text(body.reason);
+    const shouldApply = body.apply === true;
 
-    // Do not convert blank strings or null to zero.
     if (
       !originalCalculationId ||
       !studentRoll ||
@@ -78,14 +430,7 @@ export async function POST(request: Request) {
       return errorResponse('New mark must be a valid number.', 400);
     }
 
-    const component = COMPONENTS[componentName];
-
-    if (!component) {
-      return errorResponse('Unsupported mark component.', 400);
-    }
-
     const db: any = getDB();
-
     const records = Array.isArray(db.calculatedResults)
       ? db.calculatedResults
       : [];
@@ -101,17 +446,6 @@ export async function POST(request: Request) {
     if (original.status !== 'published') {
       return errorResponse(
         'Corrections can only start from a published calculation.',
-        400
-      );
-    }
-
-    // This initial implementation intentionally supports UG Semester 3 only.
-    if (
-      text(original.program).toUpperCase() !== 'UG' ||
-      Number(original.semester) !== 3
-    ) {
-      return errorResponse(
-        'The correction preview currently supports UG Semester 3 only.',
         400
       );
     }
@@ -143,179 +477,79 @@ export async function POST(request: Request) {
     }
 
     const originalResult = studentMatches[0];
-    const sourceStudent = originalResult?.student;
+    const sourceStudent = originalResult?.student ?? originalResult;
 
-    if (
-      !sourceStudent ||
-      !sourceStudent.subjects ||
-      typeof sourceStudent.subjects !== 'object' ||
-      Array.isArray(sourceStudent.subjects)
-    ) {
-      return errorResponse(
-        'Original raw subject component data is unavailable.',
-        400
-      );
-    }
-
-    // Resolve the paper key case-insensitively to avoid casing mismatches.
-    const matchedPaperEntry = Object.entries(sourceStudent.subjects).find(
-      ([key]) => key.toLowerCase() === paperCode.toLowerCase()
-    );
-
-    if (!matchedPaperEntry) {
-      return errorResponse(
-        'Paper component data was not found for this student.',
-        404
-      );
-    }
-
-    const [actualPaperCode, sourceSubject] = matchedPaperEntry as [
-      string,
-      Record<string, unknown>,
-    ];
-
-    if (!sourceSubject || typeof sourceSubject !== 'object') {
-      return errorResponse(
-        'The selected paper has invalid raw mark data.',
-        400
-      );
-    }
-
-    const batch = Number(sourceStudent.batch ?? original.batch);
-
-    if (!Number.isFinite(batch)) {
-      return errorResponse(
-        'A valid batch could not be determined for this student.',
-        400
-      );
-    }
-
-    const course = text(sourceStudent.course);
+    const program = String(original.program).toUpperCase() as 'UG' | 'PG';
+    const semester = Number(original.semester);
+    const batch = Number(sourceStudent.batch ?? original.batch ?? 2025);
+    const course = text(sourceStudent.course ?? original.course);
     const department = text(
-      sourceStudent.Department ?? sourceStudent.department
+      sourceStudent.Department ??
+        sourceStudent.department ??
+        original.department
     );
 
     const config = getResultConfig({
-      program: 'UG',
+      program,
       batch,
-      semester: 3,
+      semester,
       course: course || undefined,
       department: department || undefined,
     });
 
-    if (
-      !config?.rechecking?.enabled ||
-      !config.rechecking.recalculateResult
-    ) {
+    if (!config) {
       return errorResponse(
-        'Rechecking or result recalculation is disabled for this configuration.',
+        `No configuration found for ${program} Semester ${semester}.`,
         400
       );
     }
 
     const paper = config.papers?.find(
-      (item) =>
-        item.code.toLowerCase() === actualPaperCode.toLowerCase()
+      (item) => item.code.toLowerCase() === paperCode.toLowerCase()
     );
 
     if (!paper) {
-      return errorResponse(
-        'Paper is not configured for this student.',
-        404
-      );
+      return errorResponse('Paper is not configured for this student.', 404);
     }
 
-    const markConfig = (paper.marks as any)?.[component.configKey];
+    const maxMark = getComponentMaxMark(paper, componentName);
+    const extracted = extractStudentPaperComponents(originalResult, paper);
+    const norm = normalizeComponentName(componentName);
 
-    if (
-      !markConfig ||
-      !Number.isFinite(Number(markConfig.max)) ||
-      Number(markConfig.max) < 0
-    ) {
-      return errorResponse(
-        'That mark component is not configured for this paper.',
-        400
-      );
+    let oldValue: number | null = null;
+    if (norm === 'midsem') oldValue = extracted.midsem;
+    else if (norm === 'endsem' || norm === 'final' || norm === 'sem')
+      oldValue = extracted.endsem;
+    else if (norm === 'practical') oldValue = extracted.practical;
+    else if (norm === 'attendance') oldValue = extracted.attendance;
+    else if (norm === 'surpriseTest') oldValue = extracted.surpriseTest;
+    else if (norm === 'assignment') oldValue = extracted.assignment;
+
+    const validation = validateRecheckingMarkChange({
+      oldValue,
+      newValue,
+      maxMark,
+      config,
+    });
+
+    if (!validation.valid) {
+      return errorResponse(validation.error || 'Invalid mark change.', 400);
     }
 
-    const maxMark = Number(markConfig.max);
+    // Apply change to an isolated copy of source student
+    const updatedStudent = applyComponentToStudent(
+      sourceStudent,
+      paper,
+      componentName,
+      newValue
+    );
 
-    if (newValue < 0 || newValue > maxMark) {
-      return errorResponse(
-        `New value must be between 0 and ${maxMark}.`,
-        400
-      );
-    }
-
-    const rawOldValue = sourceSubject[component.key];
-    const parsedOldValue = Number(rawOldValue);
-
-    const oldValue =
-      text(rawOldValue) === '' || !Number.isFinite(parsedOldValue)
-        ? null
-        : parsedOldValue;
-
-    if (oldValue === null) {
-      return errorResponse(
-        'The existing component is blank or non-numeric. Review it before requesting a numeric correction.',
-        400
-      );
-    }
-
-    if (oldValue < 0 || oldValue > maxMark) {
-      return errorResponse(
-        'The existing mark is outside the configured range. Review the source mark before correcting it.',
-        400
-      );
-    }
-
-    if (
-      newValue > oldValue &&
-      !config.rechecking.allowMarkIncrease
-    ) {
-      return errorResponse(
-        'Mark increases are disabled for this configuration.',
-        400
-      );
-    }
-
-    if (
-      newValue < oldValue &&
-      !config.rechecking.allowMarkDecrease
-    ) {
-      return errorResponse(
-        'Mark decreases are disabled for this configuration.',
-        400
-      );
-    }
-
-    if (newValue === oldValue) {
-      return errorResponse(
-        'The new mark is the same as the existing mark. No correction is needed.',
-        400
-      );
-    }
-
-    /*
-     * Work on a copy. Never mutate original.results or its student data.
-     * Only the selected student's selected raw mark component is changed.
-     */
-    const updatedStudent = {
-      ...sourceStudent,
-      subjects: {
-        ...sourceStudent.subjects,
-        [actualPaperCode]: {
-          ...sourceSubject,
-          [component.key]: newValue,
-        },
-      },
-    };
-
+    // Recalculate using official result engine
     const recalculatedResults = calculateResults({
-      program: 'UG',
-      semester: 3,
+      program,
+      semester,
       batch: String(batch),
-      course,
+      course: course || undefined,
       department: department || undefined,
       mode: 'rechecking',
       students: [updatedStudent],
@@ -325,88 +559,41 @@ export async function POST(request: Request) {
       ? recalculatedResults[0]
       : null;
 
-    // Validate all calculation output before saving anything.
-    if (!recalculated) {
+    if (!recalculated || !Array.isArray(recalculated.subjects)) {
       return errorResponse(
-        'Recalculation failed. No correction was saved.',
+        'Recalculation failed. No correction was applied.',
         422
       );
     }
 
-    if (!Array.isArray(recalculated.subjects)) {
-      return errorResponse(
-        'Recalculated subject results are invalid. No correction was saved.',
-        422
-      );
-    }
-
-    const revisedPaperResult = recalculated.subjects.find(
-      (subject: any) =>
-        paperCodeOf(subject) === actualPaperCode.toLowerCase()
+    const originalPaperResult = (originalResult.subjects || []).find(
+      (s: any) => paperCodeOf(s) === paper.code.toLowerCase()
     );
 
-    if (!revisedPaperResult) {
-      return errorResponse(
-        'Recalculated paper was not found. No correction was saved.',
-        422
-      );
-    }
-
-    if (
-      !Array.isArray(originalResult.subjects) ||
-      !originalResult.subjects.some(
-        (subject: any) =>
-          paperCodeOf(subject) === actualPaperCode.toLowerCase()
-      )
-    ) {
-      return errorResponse(
-        'The original calculated paper result could not be verified. No correction was saved.',
-        422
-      );
-    }
-
-    // Only initialize a missing array. Reject malformed stored data.
-    if (db.resultCorrections === undefined || db.resultCorrections === null) {
-      db.resultCorrections = [];
-    }
-
-    if (!Array.isArray(db.resultCorrections)) {
-      return errorResponse(
-        'Correction storage is invalid. No correction was saved.',
-        500
-      );
-    }
-
-    const originalPaperResult = originalResult.subjects.find(
-      (subject: any) =>
-        paperCodeOf(subject) === actualPaperCode.toLowerCase()
+    const revisedPaperResult = recalculated.subjects.find(
+      (s: any) => paperCodeOf(s) === paper.code.toLowerCase()
     );
 
     const now = new Date().toISOString();
 
     const correction = {
       id: `CORR-${Date.now()}`,
-      status: 'preview',
+      status: shouldApply ? 'applied' : 'preview',
       originalCalculationId: original.id,
       applicationId: text(body.applicationId) || null,
 
       studentRoll: rollOf(originalResult),
-      studentName: text(
-        sourceStudent['Name of the Students'] ??
-          sourceStudent['Student Name'] ??
-          sourceStudent.name
-      ),
+      studentName: nameOf(originalResult),
 
-      program: 'UG',
-      semester: 3,
-      batch: sourceStudent.batch ?? original.batch,
-      course: sourceStudent.course ?? null,
-      department:
-        sourceStudent.Department ?? sourceStudent.department ?? null,
+      program,
+      semester,
+      batch,
+      course: course || null,
+      department: department || null,
 
-      paperCode: actualPaperCode,
+      paperCode: paper.code,
+      paperTitle: paper.title,
       component: componentName,
-      componentKey: component.key,
 
       oldValue,
       newValue,
@@ -419,38 +606,85 @@ export async function POST(request: Request) {
       revisedStudentResult: structuredClone(recalculated),
 
       createdAt: now,
+      appliedAt: shouldApply ? now : null,
       history: [
         {
-          action: 'Correction preview generated',
+          action: shouldApply
+            ? 'Correction applied to result'
+            : 'Correction preview generated',
           at: now,
         },
       ],
     };
 
-    // This appends a separate preview record. It does not replace the
-    // original calculation or change its published status or result data.
+    if (!Array.isArray(db.resultCorrections)) {
+      db.resultCorrections = [];
+    }
+
     db.resultCorrections.push(correction);
+
+    if (shouldApply) {
+      // Mark student result as revised in original calculation
+      const idx = original.results.findIndex(
+        (r: any) => rollOf(r).toLowerCase() === studentRoll.toLowerCase()
+      );
+
+      if (idx !== -1) {
+        const enrichedRevised = {
+          ...recalculated,
+          isRevised: true,
+          revisedAt: now,
+          revisedPaper: paper.code,
+          correctionId: correction.id,
+        };
+        original.results[idx] = enrichedRevised;
+        original.hasRevisions = true;
+        original.updatedAt = now;
+      }
+
+      // If tied to an application, complete it
+      if (body.applicationId && Array.isArray(db.recheckingApplications)) {
+        const app = db.recheckingApplications.find(
+          (a: any) => a.id === body.applicationId
+        );
+        if (app) {
+          app.status = 'Completed';
+          app.correctionId = correction.id;
+          app.decisionNotes = text(
+            `${app.decisionNotes ? app.decisionNotes + ' | ' : ''}Approved & mark updated to ${newValue}: ${reason}`
+          );
+          app.updatedAt = now;
+          app.history = app.history || [];
+          app.history.push({
+            action: `Mark updated to ${newValue}. Result revised.`,
+            at: now,
+          });
+        }
+      }
+    }
+
     saveDB(db);
 
     return NextResponse.json(
       {
         success: true,
-        message:
-          'Correction preview generated. The original published result has not been changed.',
+        message: shouldApply
+          ? 'Mark update applied successfully. Result has been revised.'
+          : 'Correction preview generated successfully.',
         correction,
+        applied: shouldApply,
       },
-      { status: 201 }
+      { status: shouldApply ? 200 : 201 }
     );
   } catch (error) {
     console.error('Rechecking preview error:', error);
-
     return NextResponse.json(
       {
         success: false,
         error:
           error instanceof Error
             ? error.message
-            : 'Unable to generate correction preview.',
+            : 'Unable to process correction.',
       },
       { status: 500 }
     );
