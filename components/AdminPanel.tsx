@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { DBData, Student, ProgramKey } from '@/types';
@@ -496,7 +496,18 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           <OverviewView db={db} />
         )}
 
-        {page === 'exam-sessions' && <ExamSessionsView onSync={refreshData} />}
+        {page === 'exam-sessions' && (
+  <ExamSessionsView
+    db={db}
+    onSync={refreshData}
+    onSaveSetup={handleSaveSetup}
+    onAddSubject={handleAddSubject}
+    onRemoveSubject={handleRemoveSubject}
+    onCopySubjects={handleCopySubjects}
+    onResetDemo={handleResetDemo}
+    onClearAll={handleClearAll}
+  />
+)}
 
         {page === 'subjects' && <MasterDataView kind="subjects" db={db} onRefresh={refreshData} />}
         {page === 'verify' && <VerifyView />}

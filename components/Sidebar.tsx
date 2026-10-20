@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 
@@ -307,11 +307,8 @@ const sections: MenuSection[] = [
     label: 'Examination',
     icon: 'calendar',
     items: [
-      { id: 'setup', label: 'Exam Setup', icon: 'setup' },
-      { id: 'exam-sessions', label: 'Exam Sessions', icon: 'calendar' },
+      { id: 'exam-sessions', label: 'Exam Setup & Sessions', icon: 'calendar' },
       { id: 'students', label: 'Students', icon: 'students' },
-      { id: 'subjects', label: 'Subjects & Papers', icon: 'subjects' },
-      { id: 'marks', label: 'Mark Foils', icon: 'marks' },
     ],
   },
   {
@@ -536,3 +533,4 @@ export function Sidebar({
     </aside>
   );
 }
+

@@ -128,34 +128,79 @@ export function RecheckingView() {
   const [savingApp, setSavingApp] = useState(false);
 
   // Load calculations and applications
-  const loadInitialData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [verRes, recRes] = await Promise.all([
-        fetch('/api/verify', { cache: 'no-store' }),
-        fetch('/api/rechecking', { cache: 'no-store' }),
-      ]);
 
-      const verJson = await verRes.json();
-      const recJson = await recRes.json();
+const loadInitialData = useCallback(async () => {
+  setLoading(true);
 
-      if (verJson.success) {
-        const publishedCalcs = (verJson.data || []).filter((c: any) => c.status === 'published');
-        setCalculations(publishedCalcs);
-        if (publishedCalcs.length > 0 && !selectedCalcId) {
-          setSelectedCalcId(publishedCalcs[0].id);
-        }
-      }
+  try {
+    const [verRes, recRes] = await Promise.all([
+      fetch('/api/verify', { cache: 'no-store' }),
+      fetch('/api/rechecking', { cache: 'no-store' }),
+    ]);
 
-      if (recJson.success) {
-        setApplications(recJson.applications || []);
-      }
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to load rechecking data.', ok: false });
-    } finally {
-      setLoading(false);
+    const verJson = await verRes.json();
+    const recJson = await recRes.json();
+
+    if (!verRes.ok || !verJson.success) {
+      throw new Error(
+        verJson.error || 'Could not load published examinations.'
+      );
     }
-  }, [selectedCalcId]);
+
+    // Accept supported response shapes and normalize status.
+    const allCalculations = Array.isArray(verJson.data)
+      ? verJson.data
+      : Array.isArray(verJson.calculations)
+        ? verJson.calculations
+        : [];
+
+    const publishedCalcs = allCalculations.filter(
+      (calculation: any) =>
+        String(calculation.status || '').trim().toLowerCase() ===
+        'published'
+    );
+
+    setCalculations(publishedCalcs);
+
+    // Keep the current selection if it still exists.
+    // Otherwise, select the first published calculation.
+    setSelectedCalcId((currentId) => {
+      if (
+        currentId &&
+        publishedCalcs.some((c: any) => c.id === currentId)
+      ) {
+        return currentId;
+      }
+
+      return publishedCalcs[0]?.id || '';
+    });
+
+    if (recJson.success) {
+      setApplications(recJson.applications || []);
+    }
+
+    if (publishedCalcs.length === 0) {
+      setMessage({
+        text: 'No published examinations found. Verify that a result has been published in Result Processing.',
+        ok: false,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to load rechecking data:', error);
+
+    setCalculations([]);
+    setSelectedCalcId('');
+    setMessage({
+      text:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load examinations.',
+      ok: false,
+    });
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     void loadInitialData();
@@ -237,51 +282,79 @@ export function RecheckingView() {
   };
 
   // Handle Apply Mark Update
-  const handleApplyMarkUpdate = async () => {
-    if (!selectedCalcId || !studentRoll.trim() || !selectedPaperCode || newMark === '' || !updateReason.trim()) {
-      setMessage({ text: 'Missing required parameters to apply mark update.', ok: false });
-      return;
+
+const handleApplyMarkUpdate = async () => {
+  if (
+    !selectedCalcId ||
+    !studentRoll.trim() ||
+    !selectedPaperCode ||
+    newMark === '' ||
+    !updateReason.trim()
+  ) {
+    setMessage({
+      text: 'Missing required parameters to apply mark update.',
+      ok: false,
+    });
+    return;
+  }
+
+  if (!linkedAppId) {
+    setMessage({
+      text: 'Select an approved rechecking application before applying a mark correction.',
+      ok: false,
+    });
+    return;
+  }
+
+  const confirm = window.confirm(
+    `Apply mark correction for ${studentRoll} in paper ${selectedPaperCode} (${selectedComponent}: ${currentComponentVal ?? '—'} → ${newMark})?\n\nThe original published result will remain unchanged. The revised result will be stored separately for updated reports.`
+  );
+
+  if (!confirm) return;
+
+  setProcessing(true);
+  setMessage(null);
+
+  try {
+    const res = await fetch('/api/rechecking/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        originalCalculationId: selectedCalcId,
+        studentRoll: studentRoll.trim(),
+        paperCode: selectedPaperCode,
+        component: selectedComponent,
+        newValue: Number(newMark),
+        reason: updateReason.trim(),
+        applicationId: linkedAppId,
+        apply: true,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Mark correction failed.');
     }
 
-    const confirm = window.confirm(
-      `Apply mark update for ${studentRoll} in paper ${selectedPaperCode} (${selectedComponent}: ${currentComponentVal ?? '—'} → ${newMark})?\n\nThis will update the published result and produce a revised grade sheet and report.`
-    );
-    if (!confirm) return;
+    setPreview(json);
+    setMessage({
+      text: 'Mark correction applied successfully. The original published result remains unchanged.',
+      ok: true,
+    });
 
-    setProcessing(true);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/rechecking/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          originalCalculationId: selectedCalcId,
-          studentRoll: studentRoll.trim(),
-          paperCode: selectedPaperCode,
-          component: selectedComponent,
-          newValue: Number(newMark),
-          reason: updateReason.trim(),
-          applicationId: linkedAppId || undefined,
-          apply: true,
-        }),
-      });
+    await loadStudentData(selectedCalcId, studentRoll);
+    await loadInitialData();
+  } catch (err: any) {
+    setMessage({
+      text: err.message || 'Mark correction failed.',
+      ok: false,
+    });
+  } finally {
+    setProcessing(false);
+  }
+};
 
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Mark update failed.');
-      }
-
-      setPreview(json);
-      setMessage({ text: 'Mark update applied successfully! The result is revised.', ok: true });
-      // Refresh student details and applications
-      await loadStudentData(selectedCalcId, studentRoll);
-      await loadInitialData();
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Mark update failed.', ok: false });
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   // Register New Application
   const handleRegisterApp = async () => {

@@ -23,7 +23,7 @@ function text(value: unknown): string {
 }
 
 function rollOf(result: any): string {
-  const student = result?.student ?? {};
+  const student = result?.student ?? result ?? {};
 
   return text(
     student['Roll No'] ??
@@ -31,18 +31,23 @@ function rollOf(result: any): string {
       student.rollNo ??
       student.roll ??
       student['College Roll No'] ??
-      student['College Roll No.']
+      student['College Roll No.'] ??
+      student.collegeRollNo ??
+      student['Autonomous Roll No'] ??
+      student.autonomousRollNo
   );
 }
 
 function nameOf(result: any): string {
-  const student = result?.student ?? {};
+  const student = result?.student ?? result ?? {};
 
   return text(
-    student['Name of the Students'] ??
+    student['Applicant Name'] ??
+      student['Name of the Students'] ??
       student['Student Name'] ??
       student.name ??
-      student.studentName
+      student.studentName ??
+      rollOf(result)
   );
 }
 

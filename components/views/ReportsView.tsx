@@ -20,6 +20,7 @@ function csvEscape(value: unknown) { const text = String(value ?? ''); return `"
 
 export function ReportsView({ kind }: { kind: ReportKind }) {
   const [records, setRecords] = useState<Calculation[]>([]);
+  const [corrections, setCorrections] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [department, setDepartment] = useState('All');
   const [search, setSearch] = useState('');
@@ -27,21 +28,119 @@ export function ReportsView({ kind }: { kind: ReportKind }) {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/verify', { cache: 'no-store' });
-      const json = await response.json();
-      if (!response.ok || !json.success) throw new Error(json.error || 'Unable to load result records.');
-      const data: Calculation[] = (Array.isArray(json.data) ? json.data : []).sort((a: Calculation, b: Calculation) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-      setRecords(data);
-      setSelectedId((current) => current && data.some((r) => r.id === current) ? current : (data.find((r) => r.status === 'published')?.id || data[0]?.id || ''));
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load records.'); }
-    finally { setLoading(false); }
-  }, []);
+const load = useCallback(async () => {
+  setLoading(true);
+
+  try {
+    const [response, correctionsResponse] = await Promise.all([
+      fetch('/api/verify', { cache: 'no-store' }),
+      fetch('/api/result-corrections', { cache: 'no-store' }),
+    ]);
+
+    const json = await response.json();
+    const correctionsJson = await correctionsResponse.json();
+
+    if (!response.ok || !json.success) {
+      throw new Error(
+        json.error || 'Unable to load result records.'
+      );
+    }
+
+    if (!correctionsResponse.ok || !correctionsJson.success) {
+      throw new Error(
+        correctionsJson.error || 'Unable to load result corrections.'
+      );
+    }
+
+    const data: Calculation[] = (
+      Array.isArray(json.data) ? json.data : []
+    ).sort((a: Calculation, b: Calculation) =>
+      String(b.createdAt || '').localeCompare(
+        String(a.createdAt || '')
+      )
+    );
+
+    setRecords(data);
+    setCorrections(
+      Array.isArray(correctionsJson.data)
+        ? correctionsJson.data
+        : []
+    );
+
+    setSelectedId((current) =>
+      current && data.some((r) => r.id === current)
+        ? current
+        : data.find((r) => r.status === 'published')?.id ||
+          data[0]?.id ||
+          ''
+    );
+
+    setMessage('');
+  } catch (error) {
+    setMessage(
+      error instanceof Error
+        ? error.message
+        : 'Unable to load records.'
+    );
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
   useEffect(() => { void load(); }, [load]);
 
   const selected = records.find((r) => r.id === selectedId);
+  
+const reportResults = useMemo(() => {
+  const originalResults = selected?.results || [];
+
+  if (!selected) return [];
+
+  const latestByRoll = new Map<string, any>();
+
+  const matchingCorrections = corrections
+    .filter(
+      (correction) =>
+        correction.status === 'applied' &&
+        correction.originalCalculationId === selected.id &&
+        correction.revisedStudentResult
+    )
+    .sort(
+      (a, b) =>
+        String(a.appliedAt || a.createdAt || '').localeCompare(
+          String(b.appliedAt || b.createdAt || '')
+        )
+    );
+
+  for (const correction of matchingCorrections) {
+    const roll = String(correction.studentRoll || '')
+      .trim()
+      .toLowerCase();
+
+    if (roll) {
+      latestByRoll.set(roll, correction);
+    }
+  }
+
+  return originalResults.map((originalResult) => {
+    const roll = String(rollOf(originalResult))
+      .trim()
+      .toLowerCase();
+
+    const correction = latestByRoll.get(roll);
+
+    if (!correction) return originalResult;
+
+    return {
+      ...correction.revisedStudentResult,
+      isRevised: true,
+      revisedAt: correction.appliedAt || correction.createdAt,
+      revisedPaper: correction.paperCode,
+      correctionId: correction.id,
+    };
+  });
+}, [selected, corrections]);
+
   const hasRevisedStudents = useMemo(
     () => (selected?.results || []).some((r: any) => r.isRevised === true),
     [selected]
@@ -1180,7 +1279,7 @@ const exportResultStatisticsPdf = () => {
             {kind === 'statistics' && (
               <button
                 onClick={exportResultStatisticsPdf}
-                disabled={!selected || loading || !selected.results?.length}
+            disabled={!selected || loading || !reportResults.length}
                 className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 Download RS PDF
@@ -1226,7 +1325,7 @@ const exportResultStatisticsPdf = () => {
                   {selected.program} Semester {selected.semester}
                 </strong>{' '}
                 · Batch {selected.batch || '-'} ·{' '}
-                {selected.results?.length || 0} students
+                {reportResults.length} students
               </span>
 
               <span

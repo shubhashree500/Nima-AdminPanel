@@ -1,11 +1,10 @@
+
 import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
 import { calculateResults } from '@/lib/resultEngine';
 import { getResultConfig } from '@/lib/configs';
-import type { PaperConfig, CourseConfig } from '@/lib/configs/types';
+import type { PaperConfig } from '@/lib/configs/types';
 import {
-  RECHECKING_COMPONENTS,
-  DEFAULT_RECHECKING_CONFIG,
   normalizeComponentName,
   getComponentMaxMark,
   validateRecheckingMarkChange,
@@ -17,21 +16,42 @@ function text(value: unknown): string {
 
 function rollOf(result: any): string {
   const student = result?.student ?? result ?? {};
-  return text(
-    student['Roll No'] ??
-      student['Roll No.'] ??
-      student.rollNo ??
-      student.roll ??
-      student['College Roll No'] ??
-      student['College Roll No.'] ??
-      student.collegeRollNo ??
-      student['Autonomous Roll No'] ??
-      student.autonomousRollNo
+
+  const candidates = [
+    student['Roll No'],
+    student['Roll No.'],
+    student.rollNo,
+    student.roll,
+    student.Roll,
+    student.rollNumber,
+    student.roll_number,
+    student['Roll Number'],
+    student['College Roll No'],
+    student['College Roll No.'],
+    student.collegeRollNo,
+    student['Autonomous Roll No'],
+    student['Autonomous Roll No.'],
+    student.autonomousRollNo,
+    student.registrationNo,
+    student.registrationNumber,
+    student['Registration No'],
+    student['Registration No.'],
+    student['Registration Number'],
+  ];
+
+  const value = candidates.find(
+    (item) =>
+      item !== undefined &&
+      item !== null &&
+      String(item).trim() !== ''
   );
+
+  return String(value ?? '').trim();
 }
 
 function nameOf(result: any): string {
   const student = result?.student ?? result ?? {};
+
   return text(
     student['Applicant Name'] ??
       student['Name of the Students'] ??
@@ -44,6 +64,7 @@ function nameOf(result: any): string {
 
 function deptOf(result: any): string {
   const student = result?.student ?? result ?? {};
+
   return text(
     student.Department ??
       student.department ??
@@ -64,14 +85,40 @@ function errorResponse(message: string, status: number) {
   );
 }
 
-function extractStudentPaperComponents(studentResult: any, paper: PaperConfig) {
+
+function extractStudentPaperComponents(
+  studentResult: any,
+  paper: PaperConfig
+) {
   const sourceStudent = studentResult?.student ?? studentResult ?? {};
-  const subjectsMap = sourceStudent.subjects;
-  const coursesList = Array.isArray(sourceStudent.courses)
-    ? sourceStudent.courses
-    : Array.isArray(sourceStudent.Papers)
-    ? sourceStudent.Papers
-    : null;
+
+  const toNum = (value: any): number | null =>
+    value !== undefined &&
+    value !== null &&
+    text(value) !== '' &&
+    Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
+
+  // Find spreadsheet fields without depending on key capitalization.
+  const getField = (...keys: string[]): any => {
+    for (const key of keys) {
+      const actualKey = Object.keys(sourceStudent).find(
+        (item) => item.toLowerCase() === key.toLowerCase()
+      );
+
+      if (actualKey !== undefined) {
+        return sourceStudent[actualKey];
+      }
+    }
+    return undefined;
+  };
+
+  // PG spreadsheet columns use:
+  // Midsem-Mark, Final-Mark, Midsem-Mark_1, Final-Mark_1, etc.
+  const lastPart = paper.code.trim().match(/(\d+)$/);
+  const paperNumber = lastPart ? Number(lastPart[1]) : 1;
+  const suffix = paperNumber > 1 ? `_${paperNumber - 1}` : '';
 
   let midsem: number | null = null;
   let endsem: number | null = null;
@@ -80,65 +127,131 @@ function extractStudentPaperComponents(studentResult: any, paper: PaperConfig) {
   let surpriseTest: number | null = null;
   let assignment: number | null = null;
 
-  const toNum = (v: any): number | null =>
-    v !== undefined && v !== null && text(v) !== '' && Number.isFinite(Number(v))
-      ? Number(v)
-      : null;
+  // UG structured subject marks.
+  const subjectsMap = sourceStudent.subjects;
 
-  // 1. Check subjects object (UG)
-  if (subjectsMap && typeof subjectsMap === 'object' && !Array.isArray(subjectsMap)) {
+  if (
+    subjectsMap &&
+    typeof subjectsMap === 'object' &&
+    !Array.isArray(subjectsMap)
+  ) {
     const entry =
       subjectsMap[paper.code] ??
       Object.entries(subjectsMap).find(
-        ([k]) => k.toLowerCase() === paper.code.toLowerCase()
+        ([key]) => key.toLowerCase() === paper.code.toLowerCase()
       )?.[1];
 
     if (entry && typeof entry === 'object') {
-      midsem = toNum(entry.MidsemMark ?? entry.midsemMark ?? entry.midsem);
-      endsem = toNum(entry.FinalMark ?? entry.finalMark ?? entry.endsem);
-      practical = toNum(entry.PracticalMark ?? entry.practicalMark ?? entry.practical);
-      attendance = toNum(entry.Attandance ?? entry.attendance);
-      surpriseTest = toNum(entry.SurpriseTest ?? entry.surpriseTest);
-      assignment = toNum(entry.Assignment ?? entry.assignment);
+      const e: any = entry;
+
+      midsem = toNum(
+        e.MidsemMark ?? e.midsemMark ?? e.midsem
+      );
+      endsem = toNum(
+        e.FinalMark ?? e.finalMark ?? e.endsem
+      );
+      practical = toNum(
+        e.PracticalMark ?? e.practicalMark ?? e.practical
+      );
+      attendance = toNum(
+        e.Attandance ?? e.Attendance ?? e.attendance
+      );
+      surpriseTest = toNum(
+        e.SurpriseTest ?? e.surpriseTest
+      );
+      assignment = toNum(e.Assignment ?? e.assignment);
     }
   }
 
-  // 2. Check courses list (PG)
-  if (coursesList) {
-    const c = coursesList.find((item: any) => {
-      const raw = String(item?.paper?.code || item?.code || item?.paper || '')
-        .trim()
-        .toLowerCase()
-        .replace(/^paper\s*/, '');
-      return raw === paper.code.toLowerCase().replace(/^paper\s*/, '');
-    });
+  // PG course-based marks.
+  const courses = Array.isArray(sourceStudent.courses)
+    ? sourceStudent.courses
+    : Array.isArray(sourceStudent.Papers)
+      ? sourceStudent.Papers
+      : [];
 
-    if (c) {
-      if (c.midsemMark !== undefined || c.midsem !== undefined) {
-        midsem = toNum(c.midsemMark ?? c.midsem);
-      }
-      if (c.finalMark !== undefined || c.endsem !== undefined) {
-        endsem = toNum(c.finalMark ?? c.endsem);
-      }
-      if (c.practical !== undefined || c.practicalMark !== undefined) {
-        practical = toNum(c.practical ?? c.practicalMark);
-      }
-    }
+  const courseEntry = courses.find((item: any) => {
+    const raw = String(
+      item?.paper?.code ?? item?.code ?? item?.paper ?? ''
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/^paper\s*/, '');
+
+    return raw === paper.code.toLowerCase().replace(/^paper\s*/, '');
+  });
+
+  if (courseEntry) {
+    midsem = toNum(
+      courseEntry.midsemMark ?? courseEntry.midsem
+    ) ?? midsem;
+
+    endsem = toNum(
+      courseEntry.finalMark ?? courseEntry.endsem
+    ) ?? endsem;
+
+    practical = toNum(
+      courseEntry.practical ?? courseEntry.practicalMark
+    ) ?? practical;
+
+    attendance = toNum(
+      courseEntry.attendance ?? courseEntry.Attandance
+    ) ?? attendance;
   }
 
-  // 3. Fallback to calculated subject in studentResult.subjects
-  const subResult = (studentResult.subjects || []).find(
-    (s: any) => paperCodeOf(s) === paper.code.toLowerCase()
-  );
-
-  if (subResult) {
-    if (endsem === null && midsem === null) {
-      endsem = toNum(subResult.marks);
-    }
+  // Flat spreadsheet marks: use the paper's own component columns.
+  // Do not substitute the calculated subject total for endsem.
+  if (midsem === null) {
+    midsem = toNum(
+      getField(`Midsem-Mark${suffix}`, `MidsemMark${suffix}`)
+    );
   }
 
-  return { midsem, endsem, practical, attendance, surpriseTest, assignment };
+  if (endsem === null) {
+    endsem = toNum(
+      getField(`Final-Mark${suffix}`, `FinalMark${suffix}`)
+    );
+  }
+
+  if (practical === null) {
+    practical = toNum(
+      getField(`Practical-Mark${suffix}`, `PracticalMark${suffix}`)
+    );
+  }
+
+  if (attendance === null) {
+    attendance = toNum(
+      getField(
+        `Attendance${suffix}`,
+        `Attandance${suffix}`,
+        `Attendance-Mark${suffix}`
+      )
+    );
+  }
+
+  if (surpriseTest === null) {
+    surpriseTest = toNum(
+      getField(`SurpriseTest${suffix}`, `Surprise-Test${suffix}`)
+    );
+  }
+
+  if (assignment === null) {
+    assignment = toNum(
+      getField(`Assignment${suffix}`, `Assignment-Mark${suffix}`)
+    );
+  }
+
+  // A calculated subject total is not a component mark.
+  return {
+    midsem,
+    endsem,
+    practical,
+    attendance,
+    surpriseTest,
+    assignment,
+  };
 }
+
 
 function applyComponentToStudent(
   sourceStudent: any,
@@ -149,7 +262,70 @@ function applyComponentToStudent(
   const norm = normalizeComponentName(componentName);
   const updated = structuredClone(sourceStudent);
 
-  // If student has subjects object (UG)
+  // Update flat spreadsheet component columns used by PG imports.
+  const lastPart = paper.code.trim().match(/(\d+)$/);
+  const paperNumber = lastPart ? Number(lastPart[1]) : 1;
+  const suffix = paperNumber > 1 ? `_${paperNumber - 1}` : '';
+
+  const updateExistingField = (
+    keys: string[],
+    value: number
+  ) => {
+    const existingKey = Object.keys(updated).find((key) =>
+      keys.some((candidate) =>
+        candidate.toLowerCase() === key.toLowerCase()
+      )
+    );
+
+    if (existingKey !== undefined) {
+      updated[existingKey] = value;
+      return true;
+    }
+
+    return false;
+  };
+
+  if (norm === 'midsem') {
+    updateExistingField(
+      [`Midsem-Mark${suffix}`, `MidsemMark${suffix}`],
+      newValue
+    );
+  } else if (
+    norm === 'endsem' ||
+    norm === 'final' ||
+    norm === 'sem'
+  ) {
+    updateExistingField(
+      [`Final-Mark${suffix}`, `FinalMark${suffix}`],
+      newValue
+    );
+  } else if (norm === 'practical') {
+    updateExistingField(
+      [`Practical-Mark${suffix}`, `PracticalMark${suffix}`],
+      newValue
+    );
+  } else if (norm === 'attendance') {
+    updateExistingField(
+      [
+        `Attendance${suffix}`,
+        `Attandance${suffix}`,
+        `Attendance-Mark${suffix}`,
+      ],
+      newValue
+    );
+  } else if (norm === 'surpriseTest') {
+    updateExistingField(
+      [`SurpriseTest${suffix}`, `Surprise-Test${suffix}`],
+      newValue
+    );
+  } else if (norm === 'assignment') {
+    updateExistingField(
+      [`Assignment${suffix}`, `Assignment-Mark${suffix}`],
+      newValue
+    );
+  }
+
+  // Update UG subject-component data.
   if (
     updated.subjects &&
     typeof updated.subjects === 'object' &&
@@ -157,10 +333,13 @@ function applyComponentToStudent(
   ) {
     const matchedKey =
       Object.keys(updated.subjects).find(
-        (k) => k.toLowerCase() === paper.code.toLowerCase()
+        (key) => key.toLowerCase() === paper.code.toLowerCase()
       ) || paper.code;
 
-    if (!updated.subjects[matchedKey] || typeof updated.subjects[matchedKey] !== 'object') {
+    if (
+      !updated.subjects[matchedKey] ||
+      typeof updated.subjects[matchedKey] !== 'object'
+    ) {
       updated.subjects[matchedKey] = {
         code: paper.code,
         paperCode: paper.code,
@@ -168,56 +347,105 @@ function applyComponentToStudent(
       };
     }
 
-    if (norm === 'midsem') updated.subjects[matchedKey].MidsemMark = newValue;
-    else if (norm === 'endsem' || norm === 'final' || norm === 'sem')
+    if (norm === 'midsem') {
+      updated.subjects[matchedKey].MidsemMark = newValue;
+    } else if (
+      norm === 'endsem' ||
+      norm === 'final' ||
+      norm === 'sem'
+    ) {
       updated.subjects[matchedKey].FinalMark = newValue;
-    else if (norm === 'practical')
+    } else if (norm === 'practical') {
       updated.subjects[matchedKey].PracticalMark = newValue;
-    else if (norm === 'attendance')
+    } else if (norm === 'attendance') {
       updated.subjects[matchedKey].Attandance = newValue;
-    else if (norm === 'surpriseTest')
+    } else if (norm === 'surpriseTest') {
       updated.subjects[matchedKey].SurpriseTest = newValue;
-    else if (norm === 'assignment')
+    } else if (norm === 'assignment') {
       updated.subjects[matchedKey].Assignment = newValue;
+    }
   }
 
-  // If student has courses array (PG)
+  // Update PG course-component data.
   if (Array.isArray(updated.courses)) {
-    let course = updated.courses.find((item: any) => {
-      const raw = String(item?.paper?.code || item?.code || item?.paper || '')
+    let courseEntry = updated.courses.find((item: any) => {
+      const raw = String(
+        item?.paper?.code ?? item?.code ?? item?.paper ?? ''
+      )
         .trim()
         .toLowerCase()
         .replace(/^paper\s*/, '');
-      return raw === paper.code.toLowerCase().replace(/^paper\s*/, '');
+
+      return (
+        raw === paper.code.toLowerCase().replace(/^paper\s*/, '')
+      );
     });
 
-    if (!course) {
-      course = { paper: paper.code };
-      updated.courses.push(course);
+    if (!courseEntry) {
+      courseEntry = { paper: paper.code };
+      updated.courses.push(courseEntry);
     }
 
-    if (norm === 'midsem') course.midsemMark = newValue;
-    else if (norm === 'endsem' || norm === 'final' || norm === 'sem')
-      course.finalMark = newValue;
-    else if (norm === 'practical') {
-      course.practical = newValue;
-      course.finalMark = newValue;
+    if (norm === 'midsem') {
+      courseEntry.midsemMark = newValue;
+    } else if (
+      norm === 'endsem' ||
+      norm === 'final' ||
+      norm === 'sem'
+    ) {
+      courseEntry.finalMark = newValue;
+    } else if (norm === 'practical') {
+      courseEntry.practical = newValue;
+      courseEntry.finalMark = newValue;
+    } else if (norm === 'attendance') {
+      courseEntry.attendance = newValue;
     }
   }
 
-  // If neither existed, create subjects object
-  if (!updated.subjects && !Array.isArray(updated.courses)) {
+
+  // Preserve every original component when creating a subject entry
+  // for flat spreadsheet records, then override only the revised mark.
+  if (
+    !updated.subjects &&
+    !Array.isArray(updated.courses) &&
+    !Array.isArray(updated.Papers)
+  ) {
+    const original = extractStudentPaperComponents(sourceStudent, paper);
+
+    const components: Record<string, number | null> = {
+      midsem: original.midsem,
+      endsem: original.endsem,
+      practical: original.practical,
+      attendance: original.attendance,
+      surpriseTest: original.surpriseTest,
+      assignment: original.assignment,
+    };
+
+    components[norm] = newValue;
+
     updated.subjects = {
       [paper.code]: {
         code: paper.code,
         paperCode: paper.code,
         subject: paper.title,
-        ...(norm === 'midsem' ? { MidsemMark: newValue } : {}),
-        ...(norm === 'endsem' || norm === 'final' || norm === 'sem'
-          ? { FinalMark: newValue }
+        ...(components.midsem !== null
+          ? { MidsemMark: components.midsem }
           : {}),
-        ...(norm === 'practical' ? { PracticalMark: newValue } : {}),
-        ...(norm === 'attendance' ? { Attandance: newValue } : {}),
+        ...(components.endsem !== null
+          ? { FinalMark: components.endsem }
+          : {}),
+        ...(components.practical !== null
+          ? { PracticalMark: components.practical }
+          : {}),
+        ...(components.attendance !== null
+          ? { Attandance: components.attendance }
+          : {}),
+        ...(components.surpriseTest !== null
+          ? { SurpriseTest: components.surpriseTest }
+          : {}),
+        ...(components.assignment !== null
+          ? { Assignment: components.assignment }
+          : {}),
       },
     };
   }
@@ -236,27 +464,34 @@ export async function GET(request: Request) {
     }
 
     const db: any = getDB();
+
     const records = Array.isArray(db.calculatedResults)
       ? db.calculatedResults
       : [];
 
-    const calculation = records.find((r: any) => r.id === calculationId);
+    const calculation = records.find(
+      (record: any) => record.id === calculationId
+    );
 
     if (!calculation) {
       return errorResponse('Calculation record not found.', 404);
     }
 
-    const results = Array.isArray(calculation.results) ? calculation.results : [];
+    const results = Array.isArray(calculation.results)
+      ? calculation.results
+      : [];
 
+    // If no roll is supplied, return a student list for this calculation.
     if (!studentRoll) {
-      // Return student list for dropdown
-      const students = results.map((r: any) => ({
-        roll: rollOf(r),
-        name: nameOf(r),
-        department: deptOf(r),
-        sgpa: r.sgpa ?? '-',
-        status: (r.subjects || []).some((s: any) =>
-          ['F', 'AB', 'M'].includes(String(s?.grade || '').toUpperCase())
+      const students = results.map((result: any) => ({
+        roll: rollOf(result),
+        name: nameOf(result),
+        department: deptOf(result),
+        sgpa: result.sgpa ?? '-',
+        status: (result.subjects || []).some((subject: any) =>
+          ['F', 'AB', 'M'].includes(
+            String(subject?.grade || '').toUpperCase()
+          )
         )
           ? 'FAIL'
           : 'PASS',
@@ -276,20 +511,57 @@ export async function GET(request: Request) {
       });
     }
 
-    // Locate single student
-    const studentResult = results.find(
-      (r: any) => rollOf(r).toLowerCase() === studentRoll.trim().toLowerCase()
-    );
+    const requestedRoll = studentRoll.trim().toLowerCase();
+
+   const studentResult = results.find((result: any) => {
+  const student = result?.student ?? result;
+
+  const rolls = [
+    rollOf(result),
+    rollOf(student),
+    student?.autonomousRollNo,
+    student?.['Autonomous Roll No'],
+    student?.collegeRollNo,
+    student?.['College Roll No'],
+  ];
+
+  return rolls.some(
+    (roll) =>
+      String(roll ?? '').trim().toLowerCase() === requestedRoll
+  );
+});
 
     if (!studentResult) {
-      return errorResponse('Student not found in this calculation.', 404);
+      const availableRolls = results
+        .map((result: any) => rollOf(result))
+        .filter(Boolean)
+        .slice(0, 10);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Student roll "${studentRoll}" was not found in this examination.`,
+          availableRolls,
+          totalStudents: results.length,
+        },
+        { status: 404 }
+      );
     }
 
     const sourceStudent = studentResult?.student ?? studentResult;
-    const batch = Number(sourceStudent.batch ?? calculation.batch ?? 2025);
+
+    const batch = Number(
+      sourceStudent.batch ?? calculation.batch ?? 2025
+    );
+
     const semester = Number(calculation.semester);
-    const program = String(calculation.program).toUpperCase() as 'UG' | 'PG';
+
+    const program = String(calculation.program).toUpperCase() as
+      | 'UG'
+      | 'PG';
+
     const course = text(sourceStudent.course ?? calculation.course);
+
     const department = text(
       sourceStudent.Department ??
         sourceStudent.department ??
@@ -306,59 +578,76 @@ export async function GET(request: Request) {
 
     const papersConfig = config?.papers || [];
 
-    // Map each subject with component breakdowns
-    const papers = (studentResult.subjects || []).map((sub: any) => {
-      const pCode = text(sub.paperCode || sub.code);
-      const confPaper = papersConfig.find(
-        (p) => p.code.toLowerCase() === pCode.toLowerCase()
-      );
+    const papers = (studentResult.subjects || []).map(
+      (subject: any) => {
+        const paperCode = text(subject.paperCode || subject.code);
 
-      const paperObj = confPaper || {
-        code: pCode,
-        title: sub.subjectName || sub.title || pCode,
-        type: 'theory',
-        credit: sub.credit ?? 4,
-        marks: {
-          fullMark: sub.fullMark ?? 100,
-          endsem: { max: sub.fullMark ?? 100 },
-          midsem: { max: 20 },
-        },
-      };
+        const configuredPaper = papersConfig.find(
+          (item) =>
+            item.code.toLowerCase() === paperCode.toLowerCase()
+        );
 
-      const extracted = extractStudentPaperComponents(studentResult, paperObj as PaperConfig);
+        const paperObj: PaperConfig = configuredPaper || {
+          code: paperCode,
+          title:
+            subject.subjectName || subject.title || paperCode,
+          type: 'theory',
+          credit: subject.credit ?? 4,
+          marks: {
+            fullMark: subject.fullMark ?? 100,
+            endsem: { max: subject.fullMark ?? 100 },
+            midsem: { max: 20 },
+          },
+        } as PaperConfig;
 
-      return {
-        code: pCode,
-        title: sub.subjectName || confPaper?.title || pCode,
-        category: sub.category || confPaper?.category || '',
-        type: confPaper?.type || (extracted.practical !== null ? 'practical' : 'theory'),
-        credit: sub.credit ?? confPaper?.credit ?? 0,
-        fullMark: sub.fullMark ?? confPaper?.marks.fullMark ?? 100,
-        marks: sub.marks ?? 0,
-        grade: sub.grade || '-',
-        gradePoint: sub.gradePoint ?? 0,
-        creditPoint: sub.creditPoint ?? 0,
-        grace: sub.grace ?? 0,
-        components: {
-          midsem: {
-            value: extracted.midsem,
-            max: getComponentMaxMark(paperObj as PaperConfig, 'midsem'),
+        const extracted = extractStudentPaperComponents(
+          studentResult,
+          paperObj
+        );
+
+        return {
+          code: paperCode,
+          title:
+            subject.subjectName ||
+            subject.title ||
+            configuredPaper?.title ||
+            paperCode,
+          category:
+            subject.category || configuredPaper?.category || '',
+          type:
+            configuredPaper?.type ||
+            (extracted.practical !== null ? 'practical' : 'theory'),
+          credit: subject.credit ?? configuredPaper?.credit ?? 0,
+          fullMark:
+            subject.fullMark ??
+            configuredPaper?.marks.fullMark ??
+            100,
+          marks: subject.marks ?? 0,
+          grade: subject.grade || '-',
+          gradePoint: subject.gradePoint ?? 0,
+          creditPoint: subject.creditPoint ?? 0,
+          grace: subject.grace ?? 0,
+          components: {
+            midsem: {
+              value: extracted.midsem,
+              max: getComponentMaxMark(paperObj, 'midsem'),
+            },
+            sem: {
+              value: extracted.endsem,
+              max: getComponentMaxMark(paperObj, 'endsem'),
+            },
+            practical: {
+              value: extracted.practical,
+              max: getComponentMaxMark(paperObj, 'practical'),
+            },
+            attendance: {
+              value: extracted.attendance,
+              max: getComponentMaxMark(paperObj, 'attendance'),
+            },
           },
-          sem: {
-            value: extracted.endsem,
-            max: getComponentMaxMark(paperObj as PaperConfig, 'endsem'),
-          },
-          practical: {
-            value: extracted.practical,
-            max: getComponentMaxMark(paperObj as PaperConfig, 'practical'),
-          },
-          attendance: {
-            value: extracted.attendance,
-            max: getComponentMaxMark(paperObj as PaperConfig, 'attendance'),
-          },
-        },
-      };
-    });
+        };
+      }
+    );
 
     return NextResponse.json({
       success: true,
@@ -374,8 +663,11 @@ export async function GET(request: Request) {
         percentage: studentResult.percentage ?? '-',
         totalCredits: studentResult.totalCredits ?? '-',
         totalCreditPoints: studentResult.totalCreditPoints ?? '-',
-        status: (studentResult.subjects || []).some((s: any) =>
-          ['F', 'AB', 'M'].includes(String(s?.grade || '').toUpperCase())
+        status: (studentResult.subjects || []).some(
+          (subject: any) =>
+            ['F', 'AB', 'M'].includes(
+              String(subject?.grade || '').toUpperCase()
+            )
         )
           ? 'FAIL'
           : 'PASS',
@@ -406,6 +698,7 @@ export async function POST(request: Request) {
     const paperCode = text(body.paperCode);
     const componentName = text(body.component);
     const reason = text(body.reason);
+    const applicationId = text(body.applicationId);
     const shouldApply = body.apply === true;
 
     if (
@@ -424,6 +717,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (shouldApply && !applicationId) {
+      return errorResponse(
+        'An approved rechecking application is required before applying a mark correction.',
+        400
+      );
+    }
+
     const newValue = Number(body.newValue);
 
     if (!Number.isFinite(newValue)) {
@@ -431,6 +731,7 @@ export async function POST(request: Request) {
     }
 
     const db: any = getDB();
+
     const records = Array.isArray(db.calculatedResults)
       ? db.calculatedResults
       : [];
@@ -457,10 +758,65 @@ export async function POST(request: Request) {
       );
     }
 
-    const studentMatches = original.results.filter(
-      (result: any) =>
-        rollOf(result).toLowerCase() === studentRoll.toLowerCase()
-    );
+    // Applying a correction requires a matching Approved application.
+    let linkedApplication: any = null;
+
+    if (shouldApply) {
+      const applications = Array.isArray(db.recheckingApplications)
+        ? db.recheckingApplications
+        : [];
+
+      linkedApplication = applications.find(
+        (app: any) => app.id === applicationId
+      );
+
+      if (!linkedApplication) {
+        return errorResponse(
+          'Linked rechecking application was not found.',
+          404
+        );
+      }
+
+      if (linkedApplication.status !== 'Approved') {
+        return errorResponse(
+          'Only an Approved rechecking application can be applied.',
+          400
+        );
+      }
+
+      if (
+        text(linkedApplication.originalCalculationId) !==
+          originalCalculationId ||
+        text(linkedApplication.studentRoll).toLowerCase() !==
+          studentRoll.toLowerCase() ||
+        text(linkedApplication.paperCode).toLowerCase() !==
+          paperCode.toLowerCase()
+      ) {
+        return errorResponse(
+          'The application does not match this calculation, student, and paper.',
+          400
+        );
+      }
+    }
+
+   const requestedRoll = studentRoll.trim().toLowerCase();
+
+const studentMatches = original.results.filter((result: any) => {
+  const student = result?.student ?? result;
+
+  const rolls = [
+    rollOf(result),
+    rollOf(student),
+    student?.autonomousRollNo,
+    student?.['Autonomous Roll No'],
+    student?.collegeRollNo,
+    student?.['College Roll No'],
+  ];
+
+  return rolls.some(
+    (roll) => String(roll ?? '').trim().toLowerCase() === requestedRoll
+  );
+});
 
     if (studentMatches.length === 0) {
       return errorResponse(
@@ -479,10 +835,18 @@ export async function POST(request: Request) {
     const originalResult = studentMatches[0];
     const sourceStudent = originalResult?.student ?? originalResult;
 
-    const program = String(original.program).toUpperCase() as 'UG' | 'PG';
+    const program = String(original.program).toUpperCase() as
+      | 'UG'
+      | 'PG';
+
     const semester = Number(original.semester);
-    const batch = Number(sourceStudent.batch ?? original.batch ?? 2025);
+
+    const batch = Number(
+      sourceStudent.batch ?? original.batch ?? 2025
+    );
+
     const course = text(sourceStudent.course ?? original.course);
+
     const department = text(
       sourceStudent.Department ??
         sourceStudent.department ??
@@ -505,25 +869,45 @@ export async function POST(request: Request) {
     }
 
     const paper = config.papers?.find(
-      (item) => item.code.toLowerCase() === paperCode.toLowerCase()
+      (item) =>
+        item.code.toLowerCase() === paperCode.toLowerCase()
     );
 
     if (!paper) {
-      return errorResponse('Paper is not configured for this student.', 404);
+      return errorResponse(
+        'Paper is not configured for this student.',
+        404
+      );
     }
 
     const maxMark = getComponentMaxMark(paper, componentName);
-    const extracted = extractStudentPaperComponents(originalResult, paper);
+
+    const extracted = extractStudentPaperComponents(
+      originalResult,
+      paper
+    );
+
     const norm = normalizeComponentName(componentName);
 
     let oldValue: number | null = null;
-    if (norm === 'midsem') oldValue = extracted.midsem;
-    else if (norm === 'endsem' || norm === 'final' || norm === 'sem')
+
+    if (norm === 'midsem') {
+      oldValue = extracted.midsem;
+    } else if (
+      norm === 'endsem' ||
+      norm === 'final' ||
+      norm === 'sem'
+    ) {
       oldValue = extracted.endsem;
-    else if (norm === 'practical') oldValue = extracted.practical;
-    else if (norm === 'attendance') oldValue = extracted.attendance;
-    else if (norm === 'surpriseTest') oldValue = extracted.surpriseTest;
-    else if (norm === 'assignment') oldValue = extracted.assignment;
+    } else if (norm === 'practical') {
+      oldValue = extracted.practical;
+    } else if (norm === 'attendance') {
+      oldValue = extracted.attendance;
+    } else if (norm === 'surpriseTest') {
+      oldValue = extracted.surpriseTest;
+    } else if (norm === 'assignment') {
+      oldValue = extracted.assignment;
+    }
 
     const validation = validateRecheckingMarkChange({
       oldValue,
@@ -533,10 +917,13 @@ export async function POST(request: Request) {
     });
 
     if (!validation.valid) {
-      return errorResponse(validation.error || 'Invalid mark change.', 400);
+      return errorResponse(
+        validation.error || 'Invalid mark change.',
+        400
+      );
     }
 
-    // Apply change to an isolated copy of source student
+    // Modify an isolated copy. The published original is never changed.
     const updatedStudent = applyComponentToStudent(
       sourceStudent,
       paper,
@@ -544,7 +931,7 @@ export async function POST(request: Request) {
       newValue
     );
 
-    // Recalculate using official result engine
+    // Use the existing official calculation engine.
     const recalculatedResults = calculateResults({
       program,
       semester,
@@ -566,21 +953,43 @@ export async function POST(request: Request) {
       );
     }
 
-    const originalPaperResult = (originalResult.subjects || []).find(
-      (s: any) => paperCodeOf(s) === paper.code.toLowerCase()
+    const originalPaperResult = (
+      originalResult.subjects || []
+    ).find(
+      (subject: any) =>
+        paperCodeOf(subject) === paper.code.toLowerCase()
     );
 
     const revisedPaperResult = recalculated.subjects.find(
-      (s: any) => paperCodeOf(s) === paper.code.toLowerCase()
+      (subject: any) =>
+        paperCodeOf(subject) === paper.code.toLowerCase()
     );
 
+    if (!revisedPaperResult) {
+      return errorResponse(
+        'The revised paper result could not be found. No correction was applied.',
+        422
+      );
+    }
+
     const now = new Date().toISOString();
+    const correctionId = `CORR-${Date.now()}`;
+
+    const revisedStudentResult = shouldApply
+      ? {
+          ...structuredClone(recalculated),
+          isRevised: true,
+          revisedAt: now,
+          revisedPaper: paper.code,
+          correctionId,
+        }
+      : structuredClone(recalculated);
 
     const correction = {
-      id: `CORR-${Date.now()}`,
+      id: correctionId,
       status: shouldApply ? 'applied' : 'preview',
       originalCalculationId: original.id,
-      applicationId: text(body.applicationId) || null,
+      applicationId: applicationId || null,
 
       studentRoll: rollOf(originalResult),
       studentName: nameOf(originalResult),
@@ -599,18 +1008,19 @@ export async function POST(request: Request) {
       newValue,
       reason,
 
-      originalPaperResult: structuredClone(originalPaperResult),
+      originalPaperResult: structuredClone(originalPaperResult ?? null),
       revisedPaperResult: structuredClone(revisedPaperResult),
 
       originalStudentResult: structuredClone(originalResult),
-      revisedStudentResult: structuredClone(recalculated),
+      revisedStudentResult,
 
       createdAt: now,
       appliedAt: shouldApply ? now : null,
+
       history: [
         {
           action: shouldApply
-            ? 'Correction applied to result'
+            ? 'Approved mark correction applied; original result preserved'
             : 'Correction preview generated',
           at: now,
         },
@@ -623,54 +1033,38 @@ export async function POST(request: Request) {
 
     db.resultCorrections.push(correction);
 
-    if (shouldApply) {
-      // Mark student result as revised in original calculation
-      const idx = original.results.findIndex(
-        (r: any) => rollOf(r).toLowerCase() === studentRoll.toLowerCase()
-      );
+    // Complete the linked application only after successful recalculation.
+    if (shouldApply && linkedApplication) {
+      linkedApplication.status = 'Completed';
+      linkedApplication.correctionId = correction.id;
+      linkedApplication.decisionNotes = [
+        text(linkedApplication.decisionNotes),
+        `Mark correction applied: ${oldValue ?? '—'} → ${newValue}. ${reason}`,
+      ]
+        .filter(Boolean)
+        .join(' | ');
 
-      if (idx !== -1) {
-        const enrichedRevised = {
-          ...recalculated,
-          isRevised: true,
-          revisedAt: now,
-          revisedPaper: paper.code,
-          correctionId: correction.id,
-        };
-        original.results[idx] = enrichedRevised;
-        original.hasRevisions = true;
-        original.updatedAt = now;
+      linkedApplication.updatedAt = now;
+
+      if (!Array.isArray(linkedApplication.history)) {
+        linkedApplication.history = [];
       }
 
-      // If tied to an application, complete it
-      if (body.applicationId && Array.isArray(db.recheckingApplications)) {
-        const app = db.recheckingApplications.find(
-          (a: any) => a.id === body.applicationId
-        );
-        if (app) {
-          app.status = 'Completed';
-          app.correctionId = correction.id;
-          app.decisionNotes = text(
-            `${app.decisionNotes ? app.decisionNotes + ' | ' : ''}Approved & mark updated to ${newValue}: ${reason}`
-          );
-          app.updatedAt = now;
-          app.history = app.history || [];
-          app.history.push({
-            action: `Mark updated to ${newValue}. Result revised.`,
-            at: now,
-          });
-        }
-      }
+      linkedApplication.history.push({
+        action: `Correction ${correction.id} applied; mark changed from ${oldValue ?? '—'} to ${newValue}.`,
+        at: now,
+      });
     }
 
+    // The original published calculation remains unchanged.
     saveDB(db);
 
     return NextResponse.json(
       {
         success: true,
         message: shouldApply
-          ? 'Mark update applied successfully. Result has been revised.'
-          : 'Correction preview generated successfully.',
+          ? 'Mark correction applied successfully. The original published result remains unchanged; the revised result is stored separately.'
+          : 'Correction preview generated successfully. No result was changed.',
         correction,
         applied: shouldApply,
       },
@@ -678,6 +1072,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Rechecking preview error:', error);
+
     return NextResponse.json(
       {
         success: false,

@@ -1,14 +1,19 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useState } from 'react';
-import type {
-  ExamSession,
-  ExamSessionStatus,
-  ExamType,
-} from '@/types';
+import type { DBData, ExamSession, ExamSessionStatus, ExamType, ProgramKey } from '@/types';
+import { PROG } from '@/types';
+import { getSubjects } from '@/lib/calculations';
 
 interface ExamSessionsViewProps {
   onSync?: () => Promise<void>;
+  db: DBData;
+  onSaveSetup: (college: string, max: number, pass: number) => Promise<boolean>;
+  onAddSubject: (prog: ProgramKey, sem: number, name: string) => Promise<boolean>;
+  onRemoveSubject: (prog: ProgramKey, sem: number, index: number) => Promise<boolean>;
+  onCopySubjects: (prog: ProgramKey, sem: number) => Promise<boolean>;
+  onResetDemo: () => Promise<void>;
+  onClearAll: () => Promise<void>;
 }
 
 const EMPTY_FORM = {
@@ -22,8 +27,9 @@ const EMPTY_FORM = {
 };
 
 export function ExamSessionsView({
-  onSync,
+  onSync, db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubjects, onResetDemo, onClearAll,
 }: ExamSessionsViewProps) {
+  const [activeTab, setActiveTab] = useState<'sessions' | 'setup'>('sessions');
   const [sessions, setSessions] = useState<ExamSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -382,7 +388,13 @@ export function ExamSessionsView({
   };
 
   return (
-    <>
+    <div className="exam-management-view">
+      <div className="exam-management-tabs" role="tablist" aria-label="Exam management" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+        <button type="button" role="tab" aria-selected={activeTab === 'sessions'} className={activeTab === 'sessions' ? 'btn primary' : 'btn'} onClick={() => setActiveTab('sessions')}>Exam Sessions</button>
+        <button type="button" role="tab" aria-selected={activeTab === 'setup'} className={activeTab === 'setup' ? 'btn primary' : 'btn'} onClick={() => setActiveTab('setup')}>Exam Setup &amp; Subjects</button>
+      </div>
+      {activeTab === 'sessions' ? (
+      <>
       <div className="view-header">
         <div>
           <h1>Exam Sessions</h1>
@@ -539,7 +551,7 @@ export function ExamSessionsView({
                 }
               >
                 {Array.from(
-                  { length: 8 },
+                  { length: form.program === 'UG' ? 6 : 4 },
                   (_, index) => index + 1
                 ).map((semester) => (
                   <option
@@ -809,7 +821,19 @@ export function ExamSessionsView({
           </div>
         )}
       </div>
-    </>
+      </>
+      ) : (
+        <SetupView
+          db={db}
+          onSaveSetup={onSaveSetup}
+          onAddSubject={onAddSubject}
+          onRemoveSubject={onRemoveSubject}
+          onCopySubjects={onCopySubjects}
+          onResetDemo={onResetDemo}
+          onClearAll={onClearAll}
+        />
+      )}
+    </div>
   );
 }
 
@@ -827,3 +851,139 @@ const tdStyle: React.CSSProperties = {
   fontSize: 14,
   verticalAlign: 'middle',
 };
+
+
+// Exam Setup is kept in this same file so both workflows live in one module.
+interface SetupViewProps {
+  db: DBData;
+  onSaveSetup: (college: string, max: number, pass: number) => Promise<boolean>;
+  onAddSubject: (prog: ProgramKey, sem: number, name: string) => Promise<boolean>;
+  onRemoveSubject: (prog: ProgramKey, sem: number, index: number) => Promise<boolean>;
+  onCopySubjects: (prog: ProgramKey, sem: number) => Promise<boolean>;
+  onResetDemo: () => Promise<void>;
+  onClearAll: () => Promise<void>;
+}
+
+function SetupView({ db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubjects, onResetDemo, onClearAll }: SetupViewProps) {
+  const [collegeName, setCollegeName] = useState(db.college);
+  const [maxMarks, setMaxMarks] = useState(String(db.max));
+  const [passMarks, setPassMarks] = useState(String(db.pass));
+  const [cfgMsg, setCfgMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
+  const [subjProg, setSubjProg] = useState<ProgramKey>('UG');
+  const [subjSem, setSubjSem] = useState<number>(1);
+  const [newSubj, setNewSubj] = useState('');
+  const [subjMsg, setSubjMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'' | 'demo' | 'all'>('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setCollegeName(db.college);
+    setMaxMarks(String(db.max));
+    setPassMarks(String(db.pass));
+  }, [db.college, db.max, db.pass]);
+
+  const saveConfig = async () => {
+    const m = Number(maxMarks), p = Number(passMarks);
+    if (!Number.isFinite(m) || m <= 0 || !Number.isFinite(p) || p < 0 || p > m) {
+      setCfgMsg({ text: 'Pass marks must be between 0 and full marks.', type: 'bad' }); return;
+    }
+    setBusy(true);
+    try {
+      const ok = await onSaveSetup(collegeName.trim() || 'Nimapara Autonomous College', m, p);
+      setCfgMsg({ text: ok ? 'College and marks settings saved.' : 'Failed to save configuration.', type: ok ? 'ok' : 'bad' });
+    } finally { setBusy(false); }
+  };
+
+  const addSubject = async () => {
+    const name = newSubj.trim();
+    if (!name) { setSubjMsg({ text: 'Enter a subject name first.', type: 'bad' }); return; }
+    const current = getSubjects(db, subjProg, subjSem);
+    if (current.some(s => s.toLowerCase() === name.toLowerCase())) {
+      setSubjMsg({ text: 'That subject is already in this semester.', type: 'bad' }); return;
+    }
+    setBusy(true);
+    try {
+      const ok = await onAddSubject(subjProg, subjSem, name);
+      if (ok) { setNewSubj(''); setSubjMsg({ text: 'Subject added.', type: 'ok' }); }
+      else setSubjMsg({ text: 'Could not add subject.', type: 'bad' });
+    } finally { setBusy(false); }
+  };
+
+  const removeSubject = async (index: number, name: string) => {
+    if (!window.confirm(`Remove subject “${name}” from ${PROG[subjProg].full}, Semester ${subjSem}?`)) return;
+    setBusy(true);
+    try {
+      const ok = await onRemoveSubject(subjProg, subjSem, index);
+      setSubjMsg({ text: ok ? 'Subject removed.' : 'Could not remove subject.', type: ok ? 'ok' : 'bad' });
+    } finally { setBusy(false); }
+  };
+
+  const copySubjects = async () => {
+    if (!window.confirm(`Copy this subject list to every semester of ${PROG[subjProg].full}?`)) return;
+    setBusy(true);
+    try {
+      const ok = await onCopySubjects(subjProg, subjSem);
+      setSubjMsg({ text: ok ? `Subject list copied to every semester of ${PROG[subjProg].full}.` : 'Could not copy subjects.', type: ok ? 'ok' : 'bad' });
+    } finally { setBusy(false); }
+  };
+
+  const runDangerAction = async (kind: 'demo' | 'all') => {
+    if (confirmAction !== kind) { setConfirmAction(kind); return; }
+    const finalConfirm = window.confirm(kind === 'demo'
+      ? 'Reset the application to demo data? This may replace current demo-managed data.'
+      : 'Delete all students and marks? This action cannot be undone.');
+    setConfirmAction('');
+    if (!finalConfirm) return;
+    setBusy(true);
+    try {
+      if (kind === 'demo') { await onResetDemo(); setCfgMsg({ text: 'Reset to demo data completed.', type: 'ok' }); }
+      else { await onClearAll(); setCfgMsg({ text: 'Student and mark data cleared.', type: 'ok' }); }
+    } finally { setBusy(false); }
+  };
+
+  const subjects = getSubjects(db, subjProg, subjSem);
+  return (
+    <>
+      <div className="view-header">
+        <div><h1>Exam Setup</h1><p className="sub">Configure college-wide marks settings and manage subjects by program and semester.</p></div>
+      </div>
+      <div className="card">
+        <h2>College and marks settings</h2>
+        <p className="hint">These are the existing general settings. Program-specific UG/PG calculation engines remain unchanged.</p>
+        <div className="row">
+          <label>College name<input value={collegeName} onChange={e => { setCollegeName(e.target.value); setCfgMsg(null); }} /></label>
+          <label>Full marks per subject<input type="number" min={1} value={maxMarks} onChange={e => { setMaxMarks(e.target.value); setCfgMsg(null); }} /></label>
+          <label>Pass marks per subject<input type="number" min={0} value={passMarks} onChange={e => { setPassMarks(e.target.value); setCfgMsg(null); }} /></label>
+          <button className="btn primary" onClick={saveConfig} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button>
+        </div>
+        {cfgMsg && <div className={`msg ${cfgMsg.type}`} role="status">{cfgMsg.text}</div>}
+      </div>
+      <div className="card">
+        <h2>Subject manager</h2>
+        <p className="hint">Choose a program and semester to view, add, or remove subjects.</p>
+        <div className="row">
+          <label>Program<select value={subjProg} onChange={e => { setSubjProg(e.target.value as ProgramKey); setSubjSem(1); setSubjMsg(null); }}>{(Object.keys(PROG) as ProgramKey[]).map(p => <option key={p} value={p}>{PROG[p].full}</option>)}</select></label>
+          <label>Semester<select value={subjSem} onChange={e => { setSubjSem(Number(e.target.value)); setSubjMsg(null); }}>{Array.from({ length: PROG[subjProg].sems }, (_, i) => i + 1).map(n => <option key={n} value={n}>Semester {n}</option>)}</select></label>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+          {subjects.length ? subjects.map((name, i) => <span key={`${name}-${i}`} className="tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{name}<button type="button" aria-label={`Remove ${name}`} disabled={busy} onClick={() => removeSubject(i, name)}>×</button></span>) : <div className="empty">No subjects configured for this semester yet.</div>}
+        </div>
+        <div className="row" style={{ marginTop: 14 }}>
+          <label>New subject<input placeholder="e.g. Zoology" value={newSubj} onChange={e => { setNewSubj(e.target.value); setSubjMsg(null); }} onKeyDown={e => { if (e.key === 'Enter') void addSubject(); }} /></label>
+          <button className="btn primary" onClick={addSubject} disabled={busy}>{busy ? 'Working…' : 'Add subject'}</button>
+          <button className="btn" onClick={copySubjects} disabled={busy || subjects.length === 0}>Copy to all semesters</button>
+        </div>
+        {subjMsg && <div className={`msg ${subjMsg.type}`} role="status">{subjMsg.text}</div>}
+      </div>
+      <div className="card">
+        <h2>Data maintenance</h2>
+        <p className="hint">These actions affect student/mark data, not just the selected exam session. Use only when you intend to reset or clear data.</p>
+        <div className="row">
+          <button className="btn danger" disabled={busy} onClick={() => void runDangerAction('demo')}>{confirmAction === 'demo' ? 'Confirm reset…' : 'Reset demo data'}</button>
+          <button className="btn danger" disabled={busy} onClick={() => void runDangerAction('all')}>{confirmAction === 'all' ? 'Confirm delete…' : 'Delete all students and marks'}</button>
+          {confirmAction && <button className="btn" disabled={busy} onClick={() => setConfirmAction('')}>Cancel</button>}
+        </div>
+      </div>
+    </>
+  );
+}
