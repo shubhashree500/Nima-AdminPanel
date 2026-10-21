@@ -392,6 +392,34 @@ const PG_FIELD_MAPPINGS: Record<
   ],
 };
 
+export function getPgPaperSourceKeys(
+  department: string,
+  paperIndex: number,
+  paperType?: string,
+): {
+  midsem?: string;
+  endsem?: string;
+  practical?: string;
+} {
+  const mapping =
+    PG_FIELD_MAPPINGS[department]?.[paperIndex];
+
+  if (!mapping) {
+    return {};
+  }
+
+  if (paperType === 'practical') {
+    const practical = mapping.practical ?? mapping.final;
+    return practical ? { practical } : {};
+  }
+
+  return {
+    ...(mapping.mid ? { midsem: mapping.mid } : {}),
+    ...(mapping.final ? { endsem: mapping.final } : {}),
+    ...(mapping.practical ? { practical: mapping.practical } : {}),
+  };
+}
+
 /* =========================================================
    GET PAPER MARKS
    ========================================================= */

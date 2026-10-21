@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 
@@ -11,18 +11,12 @@ export type PageKey =
   | 'results'
   | 'overview'
   | 'exam-sessions'
-  | 'subjects'
   | 'verify'
   | 'publish'
   | 'grade-sheets'
   | 'tabular-register'
   | 'statistics'
   | 'rechecking'
-  | 'courses'
-  | 'departments'
-  | 'master-subjects'
-  | 'batches'
-  | 'rules'
   | 'settings';
 
 type SidebarProps = {
@@ -50,7 +44,6 @@ type IconName =
   | 'setup'
   | 'calendar'
   | 'students'
-  | 'subjects'
   | 'marks'
   | 'calculator'
   | 'verify'
@@ -60,11 +53,6 @@ type IconName =
   | 'register'
   | 'statistics'
   | 'refresh'
-  | 'courses'
-  | 'department'
-  | 'database'
-  | 'batches'
-  | 'rules'
   | 'settings';
 
 function Icon({
@@ -133,16 +121,6 @@ function Icon({
           <path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5" />
           <path d="M16 5.5a3 3 0 0 1 0 5.8" />
           <path d="M17 15c2.4.3 4 1.8 4 4.5" />
-        </svg>
-      );
-
-    case 'subjects':
-      return (
-        <svg {...common}>
-          <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z" />
-          <path d="M4 4.5v17" />
-          <path d="M8 6h8" />
-          <path d="M8 10h8" />
         </svg>
       );
 
@@ -240,57 +218,6 @@ function Icon({
         </svg>
       );
 
-    case 'courses':
-      return (
-        <svg {...common}>
-          <path d="M3 6.5 12 3l9 3.5L12 10z" />
-          <path d="M6 9v6c2 2 10 2 12 0V9" />
-          <path d="M21 7v7" />
-        </svg>
-      );
-
-    case 'department':
-      return (
-        <svg {...common}>
-          <path d="M4 21V8l8-5 8 5v13" />
-          <path d="M9 21v-5h6v5" />
-          <path d="M8 10h1" />
-          <path d="M15 10h1" />
-          <path d="M8 13h1" />
-          <path d="M15 13h1" />
-        </svg>
-      );
-
-    case 'database':
-      return (
-        <svg {...common}>
-          <ellipse cx="12" cy="5" rx="8" ry="3" />
-          <path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
-          <path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7" />
-        </svg>
-      );
-
-    case 'batches':
-      return (
-        <svg {...common}>
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-          <path d="M8 8h8" />
-          <path d="M8 12h8" />
-          <path d="M8 16h5" />
-        </svg>
-      );
-
-    case 'rules':
-      return (
-        <svg {...common}>
-          <path d="M5 4h14" />
-          <path d="M5 8h14" />
-          <path d="M5 12h9" />
-          <path d="M5 16h14" />
-          <path d="M5 20h10" />
-        </svg>
-      );
-
     case 'settings':
       return (
         <svg {...common}>
@@ -352,26 +279,6 @@ const sections: MenuSection[] = [
       },
     ],
   },
-  {
-    id: 'master-data',
-    label: 'Master Data',
-    icon: 'database',
-    items: [
-      { id: 'courses', label: 'Courses', icon: 'courses' },
-      {
-        id: 'departments',
-        label: 'Departments',
-        icon: 'department',
-      },
-      {
-        id: 'master-subjects',
-        label: 'Subjects',
-        icon: 'subjects',
-      },
-      { id: 'batches', label: 'Batches', icon: 'batches' },
-      { id: 'rules', label: 'Result Rules', icon: 'rules' },
-    ],
-  },
 ];
 
 export function Sidebar({
@@ -387,7 +294,6 @@ export function Sidebar({
     processing: true,
     results: true,
     rechecking: false,
-    'master-data': false,
   });
 
   const toggleSection = (sectionId: string) => {

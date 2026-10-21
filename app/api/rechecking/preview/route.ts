@@ -9,6 +9,7 @@ import {
   getComponentMaxMark,
   validateRecheckingMarkChange,
 } from '@/lib/rules/rechecking';
+import { getPgPaperSourceKeys } from '@/lib/calculation/pgCalculator';
 
 function text(value: unknown): string {
   return String(value ?? '').trim();
@@ -85,10 +86,63 @@ function errorResponse(message: string, status: number) {
   );
 }
 
+function rollsOf(result: any): string[] {
+  const student = result?.student ?? result ?? {};
+  return [
+    rollOf(result),
+    rollOf(student),
+    student?.autonomousRollNo,
+    student?.['Autonomous Roll No'],
+    student?.collegeRollNo,
+    student?.['College Roll No'],
+    student?.['College Roll No.'],
+    student?.['Roll No'],
+    student?.rollNo,
+  ]
+    .map((item) => String(item ?? '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function resultMatchesRoll(result: any, requestedRoll: string): boolean {
+  const requested = requestedRoll.trim().toLowerCase();
+  return rollsOf(result).includes(requested);
+}
+
+function orderedAppliedCorrections(
+  db: any,
+  calculationId: string,
+  result: any
+) {
+  const rolls = new Set(rollsOf(result));
+
+  return (Array.isArray(db.resultCorrections) ? db.resultCorrections : [])
+    .filter(
+      (correction: any) =>
+        correction?.status === 'applied' &&
+        correction.originalCalculationId === calculationId &&
+        rolls.has(String(correction.studentRoll ?? '').trim().toLowerCase())
+    )
+    .sort((a: any, b: any) =>
+      String(a.appliedAt || a.createdAt || '').localeCompare(
+        String(b.appliedAt || b.createdAt || '')
+      )
+    );
+}
+
+function paperIndexOf(papers: PaperConfig[] | undefined, paper: PaperConfig) {
+  if (!Array.isArray(papers)) return -1;
+  return papers.findIndex(
+    (item) => item.code.toLowerCase() === paper.code.toLowerCase()
+  );
+}
 
 function extractStudentPaperComponents(
   studentResult: any,
-  paper: PaperConfig
+  paper: PaperConfig,
+  options?: {
+    papers?: PaperConfig[];
+    department?: string;
+  }
 ) {
   const sourceStudent = studentResult?.student ?? studentResult ?? {};
 
@@ -241,6 +295,25 @@ function extractStudentPaperComponents(
     );
   }
 
+  const pgIndex = paperIndexOf(options?.papers, paper);
+  if (pgIndex >= 0 && options?.department) {
+    const pgKeys = getPgPaperSourceKeys(
+      options.department,
+      pgIndex,
+      paper.type
+    );
+
+    if (midsem === null && pgKeys.midsem) {
+      midsem = toNum(sourceStudent[pgKeys.midsem]);
+    }
+    if (endsem === null && pgKeys.endsem) {
+      endsem = toNum(sourceStudent[pgKeys.endsem]);
+    }
+    if (practical === null && pgKeys.practical) {
+      practical = toNum(sourceStudent[pgKeys.practical]);
+    }
+  }
+
   // A calculated subject total is not a component mark.
   return {
     midsem,
@@ -257,7 +330,11 @@ function applyComponentToStudent(
   sourceStudent: any,
   paper: PaperConfig,
   componentName: string,
-  newValue: number
+  newValue: number,
+  options?: {
+    papers?: PaperConfig[];
+    department?: string;
+  }
 ) {
   const norm = normalizeComponentName(componentName);
   const updated = structuredClone(sourceStudent);
@@ -323,6 +400,26 @@ function applyComponentToStudent(
       [`Assignment${suffix}`, `Assignment-Mark${suffix}`],
       newValue
     );
+  }
+
+  const pgIndex = paperIndexOf(options?.papers, paper);
+  if (pgIndex >= 0 && options?.department) {
+    const pgKeys = getPgPaperSourceKeys(
+      options.department,
+      pgIndex,
+      paper.type
+    );
+
+    if (norm === 'midsem' && pgKeys.midsem) {
+      updated[pgKeys.midsem] = newValue;
+    } else if (
+      (norm === 'endsem' || norm === 'final' || norm === 'sem') &&
+      pgKeys.endsem
+    ) {
+      updated[pgKeys.endsem] = newValue;
+    } else if (norm === 'practical' && pgKeys.practical) {
+      updated[pgKeys.practical] = newValue;
+    }
   }
 
   // Update UG subject-component data.
@@ -410,7 +507,7 @@ function applyComponentToStudent(
     !Array.isArray(updated.courses) &&
     !Array.isArray(updated.Papers)
   ) {
-    const original = extractStudentPaperComponents(sourceStudent, paper);
+    const original = extractStudentPaperComponents(sourceStudent, paper, options);
 
     const components: Record<string, number | null> = {
       midsem: original.midsem,
@@ -448,6 +545,37 @@ function applyComponentToStudent(
           : {}),
       },
     };
+  }
+
+  return updated;
+}
+
+function applyStoredCorrections(
+  sourceStudent: any,
+  corrections: any[],
+  papersConfig: PaperConfig[],
+  department: string
+) {
+  let updated = structuredClone(sourceStudent);
+
+  for (const correction of corrections) {
+    const paper = papersConfig.find(
+      (item) =>
+        item.code.toLowerCase() ===
+        text(correction.paperCode).toLowerCase()
+    );
+
+    if (!paper || !Number.isFinite(Number(correction.newValue))) {
+      continue;
+    }
+
+    updated = applyComponentToStudent(
+      updated,
+      paper,
+      text(correction.component),
+      Number(correction.newValue),
+      { papers: papersConfig, department }
+    );
   }
 
   return updated;
@@ -513,23 +641,18 @@ export async function GET(request: Request) {
 
     const requestedRoll = studentRoll.trim().toLowerCase();
 
-   const studentResult = results.find((result: any) => {
-  const student = result?.student ?? result;
+    const studentMatches = results.filter((result: any) =>
+      resultMatchesRoll(result, requestedRoll)
+    );
 
-  const rolls = [
-    rollOf(result),
-    rollOf(student),
-    student?.autonomousRollNo,
-    student?.['Autonomous Roll No'],
-    student?.collegeRollNo,
-    student?.['College Roll No'],
-  ];
+    if (studentMatches.length > 1) {
+      return errorResponse(
+        'Student roll is not unique in this calculation.',
+        409
+      );
+    }
 
-  return rolls.some(
-    (roll) =>
-      String(roll ?? '').trim().toLowerCase() === requestedRoll
-  );
-});
+    const studentResult = studentMatches[0];
 
     if (!studentResult) {
       const availableRolls = results
@@ -578,7 +701,31 @@ export async function GET(request: Request) {
 
     const papersConfig = config?.papers || [];
 
-    const papers = (studentResult.subjects || []).map(
+    const appliedCorrections = orderedAppliedCorrections(
+      db,
+      calculation.id,
+      studentResult
+    );
+
+    const latestCorrection =
+      appliedCorrections[appliedCorrections.length - 1] ?? null;
+
+    const displayStudent = appliedCorrections.length
+      ? applyStoredCorrections(
+          sourceStudent,
+          appliedCorrections,
+          papersConfig,
+          department
+        )
+      : sourceStudent;
+
+    const displayResult =
+      latestCorrection?.revisedStudentResult &&
+      Array.isArray(latestCorrection.revisedStudentResult.subjects)
+        ? latestCorrection.revisedStudentResult
+        : studentResult;
+
+    const papers = (displayResult.subjects || []).map(
       (subject: any) => {
         const paperCode = text(subject.paperCode || subject.code);
 
@@ -601,8 +748,9 @@ export async function GET(request: Request) {
         } as PaperConfig;
 
         const extracted = extractStudentPaperComponents(
-          studentResult,
-          paperObj
+          { student: displayStudent, subjects: displayResult.subjects },
+          paperObj,
+          { papers: papersConfig, department }
         );
 
         return {
@@ -659,11 +807,11 @@ export async function GET(request: Request) {
         program,
         semester,
         batch,
-        sgpa: studentResult.sgpa ?? '-',
-        percentage: studentResult.percentage ?? '-',
-        totalCredits: studentResult.totalCredits ?? '-',
-        totalCreditPoints: studentResult.totalCreditPoints ?? '-',
-        status: (studentResult.subjects || []).some(
+        sgpa: displayResult.sgpa ?? '-',
+        percentage: displayResult.percentage ?? '-',
+        totalCredits: displayResult.totalCredits ?? '-',
+        totalCreditPoints: displayResult.totalCreditPoints ?? '-',
+        status: (displayResult.subjects || []).some(
           (subject: any) =>
             ['F', 'AB', 'M'].includes(
               String(subject?.grade || '').toUpperCase()
@@ -671,7 +819,7 @@ export async function GET(request: Request) {
         )
           ? 'FAIL'
           : 'PASS',
-        isRevised: studentResult.isRevised === true,
+        isRevised: appliedCorrections.length > 0,
       },
       papers,
     });
@@ -799,24 +947,11 @@ export async function POST(request: Request) {
       }
     }
 
-   const requestedRoll = studentRoll.trim().toLowerCase();
+    const requestedRoll = studentRoll.trim().toLowerCase();
 
-const studentMatches = original.results.filter((result: any) => {
-  const student = result?.student ?? result;
-
-  const rolls = [
-    rollOf(result),
-    rollOf(student),
-    student?.autonomousRollNo,
-    student?.['Autonomous Roll No'],
-    student?.collegeRollNo,
-    student?.['College Roll No'],
-  ];
-
-  return rolls.some(
-    (roll) => String(roll ?? '').trim().toLowerCase() === requestedRoll
-  );
-});
+    const studentMatches = original.results.filter((result: any) =>
+      resultMatchesRoll(result, requestedRoll)
+    );
 
     if (studentMatches.length === 0) {
       return errorResponse(
@@ -884,7 +1019,8 @@ const studentMatches = original.results.filter((result: any) => {
 
     const extracted = extractStudentPaperComponents(
       originalResult,
-      paper
+      paper,
+      { papers: config.papers, department }
     );
 
     const norm = normalizeComponentName(componentName);
@@ -923,12 +1059,27 @@ const studentMatches = original.results.filter((result: any) => {
       );
     }
 
-    // Modify an isolated copy. The published original is never changed.
-    const updatedStudent = applyComponentToStudent(
+    // Replay previously applied corrections first, then this change.
+    // The published original calculation is never mutated.
+    const previousCorrections = orderedAppliedCorrections(
+      db,
+      original.id,
+      originalResult
+    );
+
+    const studentWithPrevious = applyStoredCorrections(
       sourceStudent,
+      previousCorrections,
+      config.papers || [],
+      department
+    );
+
+    const updatedStudent = applyComponentToStudent(
+      studentWithPrevious,
       paper,
       componentName,
-      newValue
+      newValue,
+      { papers: config.papers, department }
     );
 
     // Use the existing official calculation engine.

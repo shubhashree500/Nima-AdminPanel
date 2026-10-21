@@ -142,13 +142,13 @@ const reportResults = useMemo(() => {
 }, [selected, corrections]);
 
   const hasRevisedStudents = useMemo(
-    () => (selected?.results || []).some((r: any) => r.isRevised === true),
-    [selected]
+    () => reportResults.some((r: any) => r.isRevised === true),
+    [reportResults]
   );
-  const departments = useMemo(() => ['All', ...Array.from(new Set((selected?.results || []).map(deptOf).filter((x) => x && x !== '-'))).sort()], [selected]);
+  const departments = useMemo(() => ['All', ...Array.from(new Set(reportResults.map(deptOf).filter((x) => x && x !== '-'))).sort()], [reportResults]);
   const rows = useMemo(
     () =>
-      (selected?.results || []).filter(
+      reportResults.filter(
         (r) =>
           (department === 'All' || deptOf(r) === department) &&
           (!revisedOnly || r.isRevised === true) &&
@@ -156,11 +156,11 @@ const reportResults = useMemo(() => {
             .toLowerCase()
             .includes(search.toLowerCase())
       ),
-    [selected, department, search, revisedOnly]
+    [reportResults, department, search, revisedOnly]
   );
-  const paperColumns = useMemo(() => Array.from(new Set((selected?.results || []).flatMap((r) => subjectsOf(r).map((s) => String(s.subjectName || s.subject || s.paperCode || 'Paper'))))), [selected]);
+  const paperColumns = useMemo(() => Array.from(new Set(reportResults.flatMap((r) => subjectsOf(r).map((s) => String(s.subjectName || s.subject || s.paperCode || 'Paper'))))), [reportResults]);
   const stats = useMemo(() => {
-    const all = selected?.results || [];
+    const all = reportResults;
     const passed = all.filter((r) => statusOf(r) === 'PASS').length;
     const grades: Record<string, number> = {};
     const byDept: Record<string, { students: number; passed: number; failed: number }> = {};
@@ -171,7 +171,7 @@ const reportResults = useMemo(() => {
     });
     const failed = all.filter((r) => statusOf(r) === 'FAIL').length;
     return { total: all.length, passed, failed, passRate: passed + failed ? (passed / (passed + failed) * 100) : 0, grades: Object.entries(grades).sort((a,b) => a[0].localeCompare(b[0])), byDept: Object.entries(byDept).sort((a,b) => a[0].localeCompare(b[0])) };
-  }, [selected]);
+  }, [reportResults]);
 
 
 
@@ -637,7 +637,7 @@ const exportResultStatisticsPdf = () => {
       ),
     );
 
-  const sourceStudents = selected.results || [];
+  const sourceStudents = reportResults;
 
   // Use all departments in the selected calculation, as in the original script.
   const departmentNames = Array.from(

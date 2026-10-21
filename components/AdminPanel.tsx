@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { DBData, Student, ProgramKey } from '@/types';
@@ -14,7 +14,6 @@ import { ExamSessionsView } from './views/ExamSessionsView';
 import { PublishView } from './views/PublishView';
 import { ReportsView } from './views/ReportsView';
 import { RecheckingView } from './views/RecheckingView';
-import { MasterDataView } from './views/MasterDataView';
 
 interface AdminPanelProps {
   initialData: DBData;
@@ -509,18 +508,12 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
   />
 )}
 
-        {page === 'subjects' && <MasterDataView kind="subjects" db={db} onRefresh={refreshData} />}
         {page === 'verify' && <VerifyView />}
         {page === 'publish' && <PublishView />}
         {page === 'grade-sheets' && <ReportsView kind="grade-sheets" />}
         {page === 'tabular-register' && <ReportsView kind="tabular-register" />}
         {page === 'statistics' && <ReportsView kind="statistics" />}
         {page === 'rechecking' && <RecheckingView />}
-        {page === 'courses' && <MasterDataView kind="courses" db={db} onRefresh={refreshData} />}
-        {page === 'departments' && <MasterDataView kind="departments" db={db} onRefresh={refreshData} />}
-        {page === 'master-subjects' && <MasterDataView kind="master-subjects" db={db} onRefresh={refreshData} />}
-        {page === 'batches' && <MasterDataView kind="batches" db={db} onRefresh={refreshData} />}
-        {page === 'rules' && <MasterDataView kind="rules" db={db} onRefresh={refreshData} />}
         {page === 'settings' && <SetupView db={db} onSaveSetup={handleSaveSetup} onAddSubject={handleAddSubject} onRemoveSubject={handleRemoveSubject} onCopySubjects={handleCopySubjects} onResetDemo={handleResetDemo} onClearAll={handleClearAll} />}
       </main>
     </div>

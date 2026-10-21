@@ -79,12 +79,6 @@ recheckingApplications?: any[];
 // Separate correction records; original published results remain unchanged.
 resultCorrections?: any[];
 
-masterData?: {
-courses?: string[];
-departments?: string[];
-batches?: string[];
-subjects?: string[];
-};
 }
 
 /* =========================
