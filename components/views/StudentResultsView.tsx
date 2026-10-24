@@ -1,6 +1,6 @@
- 'use client';
+'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 
 type Calculation = {
   id: string;
@@ -167,7 +167,6 @@ export function StudentResultsView() {
     [selected, department, query]
   );
 
-  // Resolve the selected student from the current filtered list.
   const selectedStudent =
     selectedIndex !== null ? rows[selectedIndex] ?? null : null;
 
@@ -180,8 +179,9 @@ export function StudentResultsView() {
       return;
     }
 
-    setSelectedIndex(index);
-    setMessage(`Showing result for ${nameOf(record)} (${rollOf(record)}).`);
+    // Clicking the same student again closes the details.
+    setSelectedIndex((current) => (current === index ? null : index));
+    setMessage('');
   }
 
   function clearStudentSelection() {
@@ -196,6 +196,7 @@ export function StudentResultsView() {
           <h1 className="text-2xl font-bold text-gray-900">
             Student Results
           </h1>
+
           <p className="mt-2 text-sm text-gray-600">
             Search saved UG/PG calculation records and inspect a student's
             paper-wise result. Only records marked published are official
@@ -203,6 +204,7 @@ export function StudentResultsView() {
           </p>
         </header>
 
+        {/* Filters */}
         <div className="rounded-xl border bg-white p-5">
           <div className="grid gap-4 md:grid-cols-3">
             <label className="text-sm font-medium">
@@ -218,11 +220,9 @@ export function StudentResultsView() {
                 disabled={loading}
               >
                 <option value="">-- Select result record --</option>
+
                 {records.map((record, index) => (
-                  <option
-                    key={`${record.id}-${index}`}
-                    value={record.id}
-                  >
+                  <option key={`${record.id}-${index}`} value={record.id}>
                     {record.program} Sem {record.semester} · Batch{' '}
                     {record.batch || '-'} ·{' '}
                     {record.count ?? record.results?.length ?? 0} students ·{' '}
@@ -311,11 +311,13 @@ export function StudentResultsView() {
           </div>
         ) : (
           <>
+            {/* Student table */}
             <div className="rounded-xl border bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-semibold">Students ({rows.length})</h2>
+
                 <p className="text-sm text-gray-500">
-                  Click View result to open the student's details.
+                  Click View result to open the details below that student.
                 </p>
               </div>
 
@@ -335,38 +337,206 @@ export function StudentResultsView() {
                       <th className="border p-2">Action</th>
                     </tr>
                   </thead>
+
                   <tbody>
-                    {rows.map((record, index) => (
-                      <tr
-                        key={`${rollOf(record)}-${index}`}
-                        className={`transition-colors ${
-                          selectedIndex === index
-                            ? 'bg-blue-100'
-                            : 'hover:bg-blue-50'
-                        }`}
-                      >
-                        <td className="border p-2">{index + 1}</td>
-                        <td className="border p-2">{rollOf(record)}</td>
-                        <td className="border p-2">{nameOf(record)}</td>
-                        <td className="border p-2">{deptOf(record)}</td>
-                        <td className="border p-2">{totalOf(record)}</td>
-                        <td className="border p-2">{fullOf(record)}</td>
-                        <td className="border p-2">
-                          {record.totalCredits ?? '-'}
-                        </td>
-                        <td className="border p-2">{record.sgpa ?? '-'}</td>
-                        <td className="border p-2">{statusOf(record)}</td>
-                        <td className="border p-2">
-                          <button
-                            type="button"
-                            onClick={() => selectStudent(index)}
-                            className="cursor-pointer rounded border bg-white px-3 py-1.5 font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    {rows.map((record, index) => {
+                      const isOpen = selectedIndex === index;
+
+                      return (
+                        <Fragment key={`${rollOf(record)}-${index}`}>
+                          {/* Student row */}
+                          <tr
+                            className={`transition-colors ${
+                              isOpen ? 'bg-blue-100' : 'hover:bg-blue-50'
+                            }`}
                           >
-                            View result
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                            <td className="border p-2">{index + 1}</td>
+                            <td className="border p-2">{rollOf(record)}</td>
+                            <td className="border p-2">{nameOf(record)}</td>
+                            <td className="border p-2">{deptOf(record)}</td>
+                            <td className="border p-2">{totalOf(record)}</td>
+                            <td className="border p-2">{fullOf(record)}</td>
+                            <td className="border p-2">
+                              {record.totalCredits ?? '-'}
+                            </td>
+                            <td className="border p-2">
+                              {record.sgpa ?? '-'}
+                            </td>
+                            <td className="border p-2">{statusOf(record)}</td>
+                            <td className="border p-2">
+                              <button
+                                type="button"
+                                onClick={() => selectStudent(index)}
+                                aria-expanded={isOpen}
+                                className="cursor-pointer whitespace-nowrap rounded border bg-white px-3 py-1.5 font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                {isOpen ? 'Hide result' : 'View result'}
+                              </button>
+                            </td>
+                          </tr>
+
+                          {/* Details appear immediately after the selected row */}
+                          {isOpen && (
+                            <tr key={`details-${rollOf(record)}-${index}`}>
+                              <td
+                                colSpan={10}
+                                className="border bg-blue-50/50 p-3"
+                              >
+                                <div className="rounded-xl border-2 border-blue-300 bg-white p-5 shadow-sm sm:p-6">
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                      <h2 className="text-xl font-bold text-gray-900">
+                                        Student Result Details
+                                      </h2>
+
+                                      <p className="mt-2 text-sm text-gray-600">
+                                        {nameOf(record)} · {rollOf(record)} ·{' '}
+                                        {deptOf(record)}
+                                      </p>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={clearStudentSelection}
+                                      className="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50"
+                                    >
+                                      Close Details
+                                    </button>
+                                  </div>
+
+                                  {/* Paper-wise marks */}
+                                  {papersOf(record).length > 0 ? (
+                                    <div className="mt-5 overflow-x-auto">
+                                      <table className="w-full min-w-[750px] border-collapse text-left text-sm">
+                                        <thead>
+                                          <tr className="bg-gray-50">
+                                            <th className="border p-2">
+                                              Paper Code
+                                            </th>
+                                            <th className="border p-2">
+                                              Subject
+                                            </th>
+                                            <th className="border p-2">
+                                              Marks
+                                            </th>
+                                            <th className="border p-2">
+                                              Full Marks
+                                            </th>
+                                            <th className="border p-2">
+                                              Grade
+                                            </th>
+                                            <th className="border p-2">
+                                              Grade Point
+                                            </th>
+                                            <th className="border p-2">
+                                              Credit
+                                            </th>
+                                            <th className="border p-2">
+                                              Credit Point
+                                            </th>
+                                          </tr>
+                                        </thead>
+
+                                        <tbody>
+                                          {papersOf(record).map(
+                                            (subject, subjectIndex) => (
+                                              <tr
+                                                key={`${
+                                                  subject.paperCode || 'paper'
+                                                }-${subjectIndex}`}
+                                              >
+                                                <td className="border p-2">
+                                                  {subject.paperCode ||
+                                                    subject.paper ||
+                                                    subjectIndex + 1}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.subjectName ||
+                                                    subject.subject ||
+                                                    '-'}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.marks ?? 0}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.fullMark ?? '-'}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.grade || '-'}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.gradePoint ?? '-'}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.credit ?? '-'}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                  {subject.creditPoint ?? '-'}
+                                                </td>
+                                              </tr>
+                                            )
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <p className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+                                      This student record has no subjects
+                                      array. Paper-wise marks are not available
+                                      in this record's current structure.
+                                    </p>
+                                  )}
+
+                                  {/* Summary cards */}
+                                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                                      Total Marks
+                                      <strong className="mt-1 block">
+                                        {totalOf(record)} / {fullOf(record)}
+                                      </strong>
+                                    </div>
+
+                                    <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                                      Total Credits
+                                      <strong className="mt-1 block">
+                                        {record.totalCredits ?? '-'}
+                                      </strong>
+                                    </div>
+
+                                    <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                                      SGPA
+                                      <strong className="mt-1 block">
+                                        {record.sgpa ?? '-'}
+                                      </strong>
+                                    </div>
+
+                                    <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                                      Percentage
+                                      <strong className="mt-1 block">
+                                        {record.percentage == null
+                                          ? '-'
+                                          : `${record.percentage}%`}
+                                      </strong>
+                                    </div>
+                                  </div>
+
+                                  <p className="mt-4 font-bold">
+                                    Result: {statusOf(record)}
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
 
@@ -377,119 +547,6 @@ export function StudentResultsView() {
                 )}
               </div>
             </div>
-
-            {selectedStudent !== null && (
-              <div
-                id="student-result-details"
-                className="rounded-xl border-2 border-blue-300 bg-white p-6 shadow-sm"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Student Result Details
-                    </h2>
-                    <p className="mt-2 text-sm text-gray-600">
-                      {nameOf(selectedStudent)} · {rollOf(selectedStudent)} ·{' '}
-                      {deptOf(selectedStudent)}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={clearStudentSelection}
-                    className="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50"
-                  >
-                    Close Details
-                  </button>
-                </div>
-
-                {papersOf(selectedStudent).length > 0 ? (
-                  <div className="mt-5 overflow-x-auto">
-                    <table className="w-full border-collapse text-left text-sm">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="border p-2">Paper Code</th>
-                          <th className="border p-2">Subject</th>
-                          <th className="border p-2">Marks</th>
-                          <th className="border p-2">Full Marks</th>
-                          <th className="border p-2">Grade</th>
-                          <th className="border p-2">Grade Point</th>
-                          <th className="border p-2">Credit</th>
-                          <th className="border p-2">Credit Point</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {papersOf(selectedStudent).map((subject, index) => (
-                          <tr key={`${subject.paperCode || 'paper'}-${index}`}>
-                            <td className="border p-2">
-                              {subject.paperCode || index + 1}
-                            </td>
-                            <td className="border p-2">
-                              {subject.subjectName || subject.subject || '-'}
-                            </td>
-                            <td className="border p-2">{subject.marks ?? 0}</td>
-                            <td className="border p-2">
-                              {subject.fullMark ?? '-'}
-                            </td>
-                            <td className="border p-2">
-                              {subject.grade || '-'}
-                            </td>
-                            <td className="border p-2">
-                              {subject.gradePoint ?? '-'}
-                            </td>
-                            <td className="border p-2">
-                              {subject.credit ?? '-'}
-                            </td>
-                            <td className="border p-2">
-                              {subject.creditPoint ?? '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-                    This student record has no `subjects` array. The details
-                    panel is working, but paper-wise marks are not available
-                    in this record's current structure.
-                  </p>
-                )}
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    Total Marks
-                    <strong className="mt-1 block">
-                      {totalOf(selectedStudent)} / {fullOf(selectedStudent)}
-                    </strong>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    Total Credits
-                    <strong className="mt-1 block">
-                      {selectedStudent.totalCredits ?? '-'}
-                    </strong>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    SGPA
-                    <strong className="mt-1 block">
-                      {selectedStudent.sgpa ?? '-'}
-                    </strong>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    Percentage
-                    <strong className="mt-1 block">
-                      {selectedStudent.percentage == null
-                        ? '-'
-                        : `${selectedStudent.percentage}%`}
-                    </strong>
-                  </div>
-                </div>
-
-                <p className="mt-4 font-bold">
-                  Result: {statusOf(selectedStudent)}
-                </p>
-              </div>
-            )}
           </>
         )}
       </div>
@@ -504,13 +561,8 @@ export function StudentResultsView() {
           nav,
           button,
           select,
-          input,
-          header p {
+          input {
             display: none !important;
-          }
-
-          section {
-            padding: 0 !important;
           }
         }
       `}</style>

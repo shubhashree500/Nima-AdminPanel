@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -8,12 +9,10 @@ import { StudentsView } from './views/StudentsView';
 import { MarksView } from './views/MarksView';
 import { StudentResultsView } from './views/StudentResultsView';
 import { SetupView } from './views/SetupView';
-import { ProcessView } from './views/ProcessView';
-import { VerifyView } from './views/VerifyView';
 import { ExamSessionsView } from './views/ExamSessionsView';
-import { PublishView } from './views/PublishView';
 import { ReportsView } from './views/ReportsView';
 import { RecheckingView } from './views/RecheckingView';
+import { ResultProcessingView } from './views/ResultProcessingView';
 
 interface AdminPanelProps {
   initialData: DBData;
@@ -49,10 +48,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         }
       }
     } catch (error) {
-      console.error(
-        'Error fetching data from server:',
-        error
-      );
+      console.error('Error fetching data from server:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -89,10 +85,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         return true;
       }
     } catch (error) {
-      console.error(
-        'Error adding student:',
-        error
-      );
+      console.error('Error adding student:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -109,9 +102,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     try {
       const res = await fetch(
         `/api/students?roll=${encodeURIComponent(roll)}`,
-        {
-          method: 'DELETE',
-        }
+        { method: 'DELETE' }
       );
 
       const json = await res.json();
@@ -120,10 +111,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         setDb(json.data);
       }
     } catch (error) {
-      console.error(
-        'Error deleting student:',
-        error
-      );
+      console.error('Error deleting student:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -136,16 +124,13 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     setIsSyncing(true);
 
     try {
-      const res = await fetch(
-        '/api/students/import',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ students }),
-        }
-      );
+      const res = await fetch('/api/students/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ students }),
+      });
 
       const json = await res.json();
 
@@ -153,10 +138,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         setDb(json.data);
       }
     } catch (error) {
-      console.error(
-        'Error importing students:',
-        error
-      );
+      console.error('Error importing students:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -176,11 +158,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          roll,
-          sem,
-          marks,
-        }),
+        body: JSON.stringify({ roll, sem, marks }),
       });
 
       const json = await res.json();
@@ -190,10 +168,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         return true;
       }
     } catch (error) {
-      console.error(
-        'Error saving marks:',
-        error
-      );
+      console.error('Error saving marks:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -212,19 +187,13 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     setIsSyncing(true);
 
     try {
-      const res = await fetch(
-        '/api/marks/import',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sem,
-            records,
-          }),
-        }
-      );
+      const res = await fetch('/api/marks/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sem, records }),
+      });
 
       const json = await res.json();
 
@@ -232,10 +201,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         setDb(json.data);
       }
     } catch (error) {
-      console.error(
-        'Error importing marks:',
-        error
-      );
+      console.error('Error importing marks:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -255,11 +221,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          college,
-          max,
-          pass,
-        }),
+        body: JSON.stringify({ college, max, pass }),
       });
 
       const json = await res.json();
@@ -269,10 +231,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         return true;
       }
     } catch (error) {
-      console.error(
-        'Error saving setup:',
-        error
-      );
+      console.error('Error saving setup:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -294,11 +253,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prog,
-          sem,
-          name,
-        }),
+        body: JSON.stringify({ prog, sem, name }),
       });
 
       const json = await res.json();
@@ -308,10 +263,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         return true;
       }
     } catch (error) {
-      console.error(
-        'Error adding subject:',
-        error
-      );
+      console.error('Error adding subject:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -330,9 +282,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     try {
       const res = await fetch(
         `/api/subjects?prog=${prog}&sem=${sem}&index=${index}`,
-        {
-          method: 'DELETE',
-        }
+        { method: 'DELETE' }
       );
 
       const json = await res.json();
@@ -342,10 +292,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         return true;
       }
     } catch (error) {
-      console.error(
-        'Error removing subject:',
-        error
-      );
+      console.error('Error removing subject:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -366,10 +313,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prog,
-          sem,
-        }),
+        body: JSON.stringify({ prog, sem }),
       });
 
       const json = await res.json();
@@ -379,10 +323,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         return true;
       }
     } catch (error) {
-      console.error(
-        'Error copying subjects:',
-        error
-      );
+      console.error('Error copying subjects:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -405,10 +346,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         setDb(json.data);
       }
     } catch (error) {
-      console.error(
-        'Error resetting to demo data:',
-        error
-      );
+      console.error('Error resetting to demo data:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -429,10 +367,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         setDb(json.data);
       }
     } catch (error) {
-      console.error(
-        'Error clearing data:',
-        error
-      );
+      console.error('Error clearing data:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -448,11 +383,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
       />
 
       <main id="view">
-        {/* Existing working pages */}
-
-        {page === 'dash' && (
-          <OverviewView db={db} />
-        )}
+        {page === 'dash' && <OverviewView db={db} />}
 
         {page === 'students' && (
           <StudentsView
@@ -471,9 +402,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           />
         )}
 
-        {page === 'process' && (
-          <ProcessView />
-        )}
+        {page === 'process' && <ResultProcessingView />}
 
         {page === 'results' && <StudentResultsView />}
 
@@ -489,32 +418,46 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           />
         )}
 
-        {/* New universal-system pages */}
-
-        {page === 'overview' && (
-          <OverviewView db={db} />
-        )}
+        {page === 'overview' && <OverviewView db={db} />}
 
         {page === 'exam-sessions' && (
-  <ExamSessionsView
-    db={db}
-    onSync={refreshData}
-    onSaveSetup={handleSaveSetup}
-    onAddSubject={handleAddSubject}
-    onRemoveSubject={handleRemoveSubject}
-    onCopySubjects={handleCopySubjects}
-    onResetDemo={handleResetDemo}
-    onClearAll={handleClearAll}
-  />
-)}
+          <ExamSessionsView
+            db={db}
+            onSync={refreshData}
+            onSaveSetup={handleSaveSetup}
+            onAddSubject={handleAddSubject}
+            onRemoveSubject={handleRemoveSubject}
+            onCopySubjects={handleCopySubjects}
+            onResetDemo={handleResetDemo}
+            onClearAll={handleClearAll}
+          />
+        )}
 
-        {page === 'verify' && <VerifyView />}
-        {page === 'publish' && <PublishView />}
-        {page === 'grade-sheets' && <ReportsView kind="grade-sheets" />}
-        {page === 'tabular-register' && <ReportsView kind="tabular-register" />}
-        {page === 'statistics' && <ReportsView kind="statistics" />}
+        {page === 'grade-sheets' && (
+          <ReportsView kind="grade-sheets" />
+        )}
+
+        {page === 'tabular-register' && (
+          <ReportsView kind="tabular-register" />
+        )}
+
+        {page === 'statistics' && (
+          <ReportsView kind="statistics" />
+        )}
+
         {page === 'rechecking' && <RecheckingView />}
-        {page === 'settings' && <SetupView db={db} onSaveSetup={handleSaveSetup} onAddSubject={handleAddSubject} onRemoveSubject={handleRemoveSubject} onCopySubjects={handleCopySubjects} onResetDemo={handleResetDemo} onClearAll={handleClearAll} />}
+
+        {page === 'settings' && (
+          <SetupView
+            db={db}
+            onSaveSetup={handleSaveSetup}
+            onAddSubject={handleAddSubject}
+            onRemoveSubject={handleRemoveSubject}
+            onCopySubjects={handleCopySubjects}
+            onResetDemo={handleResetDemo}
+            onClearAll={handleClearAll}
+          />
+        )}
       </main>
     </div>
   );

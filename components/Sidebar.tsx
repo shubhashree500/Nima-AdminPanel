@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 
@@ -239,15 +239,17 @@ const sections: MenuSection[] = [
     ],
   },
   {
-    id: 'processing',
-    label: 'Result Processing',
-    icon: 'calculator',
-    items: [
-      { id: 'process', label: 'Calculate Result', icon: 'calculator' },
-      { id: 'verify', label: 'Verify Result', icon: 'verify' },
-      { id: 'publish', label: 'Publish Result', icon: 'publish' },
-    ],
-  },
+  id: 'processing',
+  label: 'Result Processing',
+  icon: 'calculator',
+  items: [
+    {
+      id: 'process',
+      label: 'Result Processing',
+      icon: 'calculator',
+    },
+  ],
+},
   {
     id: 'results',
     label: 'Results & Reports',

@@ -1,11 +1,11 @@
+
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { DBData, PROG, ProgramKey } from '@/types';
-import { getSubjects } from '@/lib/calculations';
+import React, { useEffect, useState } from 'react';
+import { PROG, ProgramKey } from '@/types';
 
 interface SetupViewProps {
-  db: DBData;
+  db: any;
   onSaveSetup: (college: string, max: number, pass: number) => Promise<boolean>;
   onAddSubject: (prog: ProgramKey, sem: number, name: string) => Promise<boolean>;
   onRemoveSubject: (prog: ProgramKey, sem: number, index: number) => Promise<boolean>;
@@ -15,268 +15,202 @@ interface SetupViewProps {
 }
 
 export function SetupView({
-  db,
-  onSaveSetup,
-  onAddSubject,
-  onRemoveSubject,
-  onCopySubjects,
   onResetDemo,
   onClearAll,
 }: SetupViewProps) {
-  // College config
-  const [collegeName, setCollegeName] = useState(db.college);
-  const [maxMarks, setMaxMarks] = useState(String(db.max));
-  const [passMarks, setPassMarks] = useState(String(db.pass));
-  const [cfgMsg, setCfgMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
-
-  // Subject manager
-  const [subjProg, setSubjProg] = useState<ProgramKey>('UG');
-  const [subjSem, setSubjSem] = useState<number>(1);
-  const [newSubj, setNewSubj] = useState('');
-  const [subjMsg, setSubjMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
-
-  // Danger actions confirm state
   const [confirmAction, setConfirmAction] = useState<'' | 'demo' | 'all'>('');
+  const [message, setMessage] = useState<{
+    text: string;
+    type: 'ok' | 'bad';
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setCollegeName(db.college);
-    setMaxMarks(String(db.max));
-    setPassMarks(String(db.pass));
-  }, [db.college, db.max, db.pass]);
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
 
-  // Click outside reset confirmation
-  useEffect(() => {
-    const handleDocumentClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
       if (!target.closest('.btn.danger')) {
         setConfirmAction('');
       }
     };
+
     document.addEventListener('click', handleDocumentClick);
-    return () => document.removeEventListener('click', handleDocumentClick);
+
+    return () => {
+      document.removeEventListener('click', handleDocumentClick);
+    };
   }, []);
 
-  const handleSaveConfig = async () => {
-    const m = Number(maxMarks);
-    const p = Number(passMarks);
-
-    if (isNaN(m) || !(m > 0) || isNaN(p) || p < 0 || p > m) {
-      setCfgMsg({ text: 'Pass marks must be between 0 and full marks.', type: 'bad' });
-      return;
-    }
-
-    const success = await onSaveSetup(collegeName.trim() || 'Your College Name', m, p);
-    if (success) {
-      setCfgMsg({ text: 'Saved.', type: 'ok' });
-    } else {
-      setCfgMsg({ text: 'Failed to save configuration.', type: 'bad' });
-    }
-  };
-
-  const handleAddSubject = async () => {
-    const trimmed = newSubj.trim();
-    if (!trimmed) return;
-
-    const currentSubs = getSubjects(db, subjProg, subjSem);
-    if (currentSubs.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
-      setSubjMsg({ text: 'That subject is already in the list.', type: 'bad' });
-      return;
-    }
-
-    const success = await onAddSubject(subjProg, subjSem, trimmed);
-    if (success) {
-      setNewSubj('');
-      setSubjMsg(null);
-    }
-  };
-
-  const handleRemoveSubject = async (index: number) => {
-    await onRemoveSubject(subjProg, subjSem, index);
-  };
-
-  const handleCopySubjects = async () => {
-    const success = await onCopySubjects(subjProg, subjSem);
-    if (success) {
-      setSubjMsg({
-        text: `Copied to every semester of ${PROG[subjProg].full}.`,
-        type: 'ok',
-      });
-    }
-  };
-
   const handleResetDemo = async () => {
+    if (busy) return;
+
     if (confirmAction !== 'demo') {
       setConfirmAction('demo');
+      setMessage({
+        text: 'Click the button again to confirm resetting the demo data.',
+        type: 'bad',
+      });
       return;
     }
+
     setConfirmAction('');
-    await onResetDemo();
-    setCfgMsg({ text: 'Reset to demo data complete.', type: 'ok' });
+    setBusy(true);
+    setMessage(null);
+
+    try {
+      await onResetDemo();
+
+      setMessage({
+        text: 'Demo data reset successfully.',
+        type: 'ok',
+      });
+    } catch {
+      setMessage({
+        text: 'Could not reset demo data. Please try again.',
+        type: 'bad',
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleClearAll = async () => {
+    if (busy) return;
+
     if (confirmAction !== 'all') {
       setConfirmAction('all');
+      setMessage({
+        text: 'Warning: this action deletes all students and marks. Click again to confirm.',
+        type: 'bad',
+      });
       return;
     }
+
     setConfirmAction('');
-    await onClearAll();
-    setCfgMsg({ text: 'Deleted all students and marks.', type: 'ok' });
+    setBusy(true);
+    setMessage(null);
+
+    try {
+      await onClearAll();
+
+      setMessage({
+        text: 'The delete request completed.',
+        type: 'ok',
+      });
+    } catch {
+      setMessage({
+        text: 'Could not delete the data. Please try again.',
+        type: 'bad',
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const subjects = getSubjects(db, subjProg, subjSem);
+  const programs = Object.keys(PROG) as ProgramKey[];
 
   return (
     <>
-      <h1>Setup</h1>
-      <p className="sub">Set the college name, marks rules and the subjects for each semester.</p>
+      <h1>Settings</h1>
+      <p className="sub">
+        Manage application information, review the academic structure, and
+        access data-management actions.
+      </p>
 
-      {/* College & Marks rules */}
-      <div className="card">
-        <h2>College and marks rules</h2>
-        <div className="row">
-          <label>
-            College name
-            <input
-              value={collegeName}
-              onChange={(e) => {
-                setCollegeName(e.target.value);
-                setCfgMsg(null);
-              }}
-            />
-          </label>
-          <label>
-            Full marks per subject
-            <input
-              type="number"
-              min={1}
-              value={maxMarks}
-              onChange={(e) => {
-                setMaxMarks(e.target.value);
-                setCfgMsg(null);
-              }}
-            />
-          </label>
-          <label>
-            Pass marks per subject
-            <input
-              type="number"
-              min={0}
-              value={passMarks}
-              onChange={(e) => {
-                setPassMarks(e.target.value);
-                setCfgMsg(null);
-              }}
-            />
-          </label>
-          <button className="btn primary" onClick={handleSaveConfig}>
-            Save
-          </button>
-        </div>
-
-        {cfgMsg && <div className={`msg ${cfgMsg.type}`}>{cfgMsg.text}</div>}
-
+      {/* Application information */}
+      <section className="card">
+        <h2>Application</h2>
         <p className="hint">
-          Result rule: a student passes when every subject is at or above the pass mark. Division: First from 60%, Second from 45%, otherwise Third.
+          Information about your results administration system.
         </p>
-      </div>
 
-      {/* Subjects */}
-      <div className="card">
-        <h2>Subjects</h2>
         <div className="row">
-          <label>
-            Program
-            <select
-              value={subjProg}
-              onChange={(e) => {
-                setSubjProg(e.target.value as ProgramKey);
-                setSubjSem(1);
-                setSubjMsg(null);
-              }}
-            >
-              {(Object.keys(PROG) as ProgramKey[]).map((p) => (
-                <option key={p} value={p}>
-                  {PROG[p].full}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Semester
-            <select
-              value={subjSem}
-              onChange={(e) => {
-                setSubjSem(Number(e.target.value));
-                setSubjMsg(null);
-              }}
-            >
-              {Array.from({ length: PROG[subjProg].sems }, (_, i) => i + 1).map((s) => (
-                <option key={s} value={s}>
-                  Semester {s}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div>
+            <strong>Application name</strong>
+            <p className="hint">Admin Panel</p>
+          </div>
+
+          <div>
+            <strong>Purpose</strong>
+            <p className="hint">
+              Student records, examination results, and result administration.
+            </p>
+          </div>
         </div>
+      </section>
 
-        <div style={{ marginTop: 14 }}>
-          {subjects.length ? (
-            subjects.map((s, i) => (
-              <span key={`${s}-${i}`} className="tag">
-                {s}
-                <button
-                  aria-label={`Remove ${s}`}
-                  onClick={() => handleRemoveSubject(i)}
-                >
-                  &times;
-                </button>
-              </span>
-            ))
-          ) : (
-            <div className="empty">No subjects yet.</div>
-          )}
-        </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <label>
-            New subject
-            <input
-              placeholder="Zoology"
-              value={newSubj}
-              onChange={(e) => {
-                setNewSubj(e.target.value);
-                setSubjMsg(null);
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddSubject()}
-            />
-          </label>
-          <button className="btn" onClick={handleAddSubject}>
-            Add subject
-          </button>
-          <button className="btn" onClick={handleCopySubjects}>
-            Copy list to all semesters
-          </button>
-        </div>
-
-        {subjMsg && <div className={`msg ${subjMsg.type}`}>{subjMsg.text}</div>}
-      </div>
-
-      {/* Data Management */}
-      <div className="card">
-        <h2>Data</h2>
-        <p className="hint" style={{ margin: '0 0 10px' }}>
-          This panel stores everything on the Node.js server. Reset brings back the demo students.
+      {/* Academic structure overview */}
+      <section className="card">
+        <h2>Academic Structure</h2>
+        <p className="hint">
+          Overview of the programs currently defined in the application.
+          Subject lists, marks rules, and examination structures should be
+          managed in their dedicated academic sections.
         </p>
+
         <div className="row">
-          <button className="btn danger" onClick={handleResetDemo}>
-            {confirmAction === 'demo' ? 'Click again to confirm' : 'Reset to demo data'}
+          {programs.map((program) => (
+            <div className="card" key={program}>
+              <h3>{PROG[program].full}</h3>
+              <p className="hint">
+                {PROG[program].sems} semesters configured
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Data management */}
+      <section className="card">
+        <h2>Data Management</h2>
+        <p className="hint">
+          Use these actions carefully. They affect the data stored by the
+          application.
+        </p>
+
+        <div className="row">
+          <button
+            type="button"
+            className="btn danger"
+            disabled={busy}
+            onClick={handleResetDemo}
+          >
+            {busy
+              ? 'Please wait...'
+              : confirmAction === 'demo'
+                ? 'Confirm demo reset'
+                : 'Reset to demo data'}
           </button>
-          <button className="btn danger" onClick={handleClearAll}>
-            {confirmAction === 'all' ? 'Click again to confirm' : 'Delete all students and marks'}
+
+          <button
+            type="button"
+            className="btn danger"
+            disabled={busy}
+            onClick={handleClearAll}
+          >
+            {busy
+              ? 'Please wait...'
+              : confirmAction === 'all'
+                ? 'Confirm delete all data'
+                : 'Delete all students and marks'}
           </button>
         </div>
-      </div>
+
+        {message && (
+          <div
+            role="status"
+            className={`msg ${message.type}`}
+            style={{ marginTop: 12 }}
+          >
+            {message.text}
+          </div>
+        )}
+
+        <p className="hint" style={{ marginTop: 14 }}>
+          Before deleting records, make sure you have any required data saved
+          elsewhere. No backup or restore feature is provided by this screen.
+        </p>
+      </section>
     </>
   );
 }

@@ -29,7 +29,6 @@ function resultStatus(result: any): 'Pass' | 'Fail' | 'Pending' {
     : 'Pass';
 }
 
-// Always display exactly one percentage sign.
 function displayPct(value: number): string {
   return `${formatPct(value).replace(/%+$/, '')}%`;
 }
@@ -58,7 +57,8 @@ export function OverviewView({ db }: OverviewViewProps) {
 
     if (saved.length) {
       const all = saved.flatMap(
-        (record: any) => record.results || []
+        (record: any) =>
+          Array.isArray(record.results) ? record.results : []
       );
 
       const passed = all.filter(
@@ -69,13 +69,20 @@ export function OverviewView({ db }: OverviewViewProps) {
         (result: any) => resultStatus(result) === 'Fail'
       ).length;
 
-      const pending = all.length - passed - failed;
+      const pending = all.filter(
+        (result: any) => resultStatus(result) === 'Pending'
+      ).length;
+
+      const evaluatedCount = passed + failed;
 
       const rows = (
         Object.keys(PROG) as ProgramKey[]
       ).map((program) => {
         const record: any = latestByProgram[program];
-        const results = record?.results || [];
+
+        const results = Array.isArray(record?.results)
+          ? record.results
+          : [];
 
         const p = results.filter(
           (result: any) => resultStatus(result) === 'Pass'
@@ -103,44 +110,36 @@ export function OverviewView({ db }: OverviewViewProps) {
 
       return {
         totalStudents: all.length,
-        evaluatedCount: all.length,
+        evaluatedCount,
         passCount: passed,
         failCount: failed,
         pending,
-        passRate:
-          passed + failed
-            ? displayPct(
-                (passed / (passed + failed)) * 100
-              )
-            : '—',
+        passRate: evaluatedCount
+          ? displayPct((passed / evaluatedCount) * 100)
+          : '—',
         rows,
-        source: 'latest',
+        source: 'latest' as const,
       };
     }
 
-    // Fallback for older student/marks records.
+    // Fallback for existing student and marks records.
     const totalStudents = db.students.length;
 
     let passCount = 0;
     let failCount = 0;
 
-    Object.keys(db.marks).forEach((key) => {
+    Object.keys(db.marks || {}).forEach((key) => {
       const [roll, sem] = key.split('|');
       const student = findStudent(db, roll);
 
-      if (!student) return;
-
-      const result = calculateResult(
-        db,
-        student,
-        Number(sem)
-      );
-
-      if (result.status === 'Pass') {
-        passCount++;
-      } else if (result.status === 'Fail') {
-        failCount++;
+      if (!student || !sem || !Number.isFinite(Number(sem))) {
+        return;
       }
+
+      const result = calculateResult(db, student, Number(sem));
+
+      if (result.status === 'Pass') passCount++;
+      else if (result.status === 'Fail') failCount++;
     });
 
     const evaluatedCount = passCount + failCount;
@@ -155,23 +154,23 @@ export function OverviewView({ db }: OverviewViewProps) {
       let passed = 0;
       let failed = 0;
 
-      Object.keys(db.marks).forEach((key) => {
+      Object.keys(db.marks || {}).forEach((key) => {
         const [roll, sem] = key.split('|');
         const student = findStudent(db, roll);
 
-        if (!student || student.p !== program) return;
-
-        const result = calculateResult(
-          db,
-          student,
-          Number(sem)
-        );
-
-        if (result.status === 'Pass') {
-          passed++;
-        } else if (result.status === 'Fail') {
-          failed++;
+        if (
+          !student ||
+          student.p !== program ||
+          !sem ||
+          !Number.isFinite(Number(sem))
+        ) {
+          return;
         }
+
+        const result = calculateResult(db, student, Number(sem));
+
+        if (result.status === 'Pass') passed++;
+        else if (result.status === 'Fail') failed++;
       });
 
       const evaluated = passed + failed;
@@ -197,42 +196,41 @@ export function OverviewView({ db }: OverviewViewProps) {
       failCount,
       pending: 0,
       passRate: evaluatedCount
-        ? displayPct(
-            (passCount / evaluatedCount) * 100
-          )
+        ? displayPct((passCount / evaluatedCount) * 100)
         : '—',
       rows,
-      source: 'legacy',
+      source: 'legacy' as const,
     };
   }, [db, latestByProgram]);
 
-  const recent = [...(db.calculatedResults || [])]
-    .sort((a, b) =>
-      String(b.createdAt || '').localeCompare(
-        String(a.createdAt || '')
-      )
-    )
-    .slice(0, 5);
+  const recent = useMemo(
+    () =>
+      [...(db.calculatedResults || [])]
+        .sort((a, b) =>
+          String(b.createdAt || '').localeCompare(
+            String(a.createdAt || '')
+          )
+        )
+        .slice(0, 5),
+    [db.calculatedResults]
+  );
 
   const overviewSubtitle =
     dashboard.source === 'latest'
       ? 'Latest saved calculation for each program'
-      : 'Student and result activity from legacy records';
+      : 'Student and result activity from existing marks records';
 
   return (
-    <>
-      {/* Header */}
-      <div className="dashboard-header">
+    <div className="dashboard-overview">
+      {/* Dashboard header */}
+      <header className="dashboard-header">
         <div className="dashboard-header-copy">
-          <div className="page-eyebrow">
-            Administration
-          </div>
+          <div className="page-eyebrow">Administration</div>
 
           <h1>Dashboard</h1>
 
           <p className="sub">
-            Examination, student and result activity across
-            the institution.
+            Examination, student and result activity across the institution.
           </p>
         </div>
 
@@ -240,33 +238,78 @@ export function OverviewView({ db }: OverviewViewProps) {
           <span className="dashboard-status-dot" />
           System online
         </div>
-      </div>
+      </header>
 
-      {/* Summary cards */}
-      <div className="tiles">
-        <div className="tile">
-          <small>Students in latest results</small>
-          <strong>{dashboard.totalStudents}</strong>
+      {/* Five compact summary cards */}
+      <section
+        aria-label="Result summary"
+        className="dashboard-summary-grid"
+      >
+        <div className="dashboard-summary-card">
+          <div className="dashboard-summary-top">
+            <small>Student Results</small>
+            <span className="summary-icon summary-icon-blue">♙</span>
+          </div>
+          <strong>
+            {dashboard.totalStudents.toLocaleString('en-IN')}
+          </strong>
+          <p>Result records</p>
         </div>
 
-        <div className="tile">
-          <small>Results processed</small>
-          <strong>{dashboard.evaluatedCount}</strong>
+        <div className="dashboard-summary-card">
+          <div className="dashboard-summary-top">
+            <small>Evaluated Results</small>
+            <span className="summary-icon summary-icon-purple">▤</span>
+          </div>
+          <strong>
+            {dashboard.evaluatedCount.toLocaleString('en-IN')}
+          </strong>
+          <p>Passed and failed</p>
         </div>
 
-        <div className="tile">
-          <small>Passed</small>
-          <strong>{dashboard.passCount}</strong>
+        <div className="dashboard-summary-card summary-card-passed">
+          <div className="dashboard-summary-top">
+            <small>Passed</small>
+            <span className="summary-icon summary-icon-green">✓</span>
+          </div>
+          <strong>
+            {dashboard.passCount.toLocaleString('en-IN')}
+          </strong>
+          <p>Successful results</p>
         </div>
 
-        <div className="tile">
-          <small>Pass rate</small>
+        <div className="dashboard-summary-card summary-card-failed">
+          <div className="dashboard-summary-top">
+            <small>Failed</small>
+            <span className="summary-icon summary-icon-red">!</span>
+          </div>
+          <strong>
+            {dashboard.failCount.toLocaleString('en-IN')}
+          </strong>
+          <p>Failed results</p>
+        </div>
+
+        <div className="dashboard-summary-card summary-card-rate">
+          <div className="dashboard-summary-top">
+            <small>Pass Rate</small>
+            <span className="summary-icon summary-icon-blue">%</span>
+          </div>
           <strong>{dashboard.passRate}</strong>
+          <p>Among evaluated results</p>
         </div>
-      </div>
+      </section>
+
+      {dashboard.pending > 0 && (
+        <div className="dashboard-pending" role="status">
+          <strong>Results awaiting evaluation</strong>
+          <span>
+            {dashboard.pending.toLocaleString('en-IN')} pending records
+          </span>
+        </div>
+      )}
 
       {/* Academic overview */}
-      <div className="card">
+      <section className="card">
         <div className="card-header">
           <div className="card-title">
             <h2>Academic Overview</h2>
@@ -279,8 +322,8 @@ export function OverviewView({ db }: OverviewViewProps) {
             <thead>
               <tr>
                 <th>Program</th>
-                <th className="num">Semesters</th>
-                <th className="num">Students</th>
+                <th className="num">Semester</th>
+                <th className="num">Students / Records</th>
                 <th className="num">Results</th>
                 <th className="num">Passed</th>
                 <th className="num">Failed</th>
@@ -299,9 +342,11 @@ export function OverviewView({ db }: OverviewViewProps) {
                   </td>
 
                   <td className="num">
-                    {row.semester
+                    {row.semester !== undefined &&
+                    row.semester !== null &&
+                    row.semester !== ''
                       ? `${row.semester} (latest)`
-                      : PROG[row.program as ProgramKey].sems}
+                      : `All ${PROG[row.program as ProgramKey].sems}`}
                   </td>
 
                   <td className="num">{row.students}</td>
@@ -320,10 +365,10 @@ export function OverviewView({ db }: OverviewViewProps) {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {/* Recent calculations */}
-      <div className="card">
+      <section className="card">
         <div className="card-header">
           <div className="card-title">
             <h2>Recent Calculations</h2>
@@ -331,7 +376,7 @@ export function OverviewView({ db }: OverviewViewProps) {
           </div>
         </div>
 
-        {recent.length ? (
+        {recent.length > 0 ? (
           <div className="scroll">
             <table>
               <thead>
@@ -350,9 +395,7 @@ export function OverviewView({ db }: OverviewViewProps) {
               <tbody>
                 {recent.map((record) => (
                   <tr key={record.id}>
-                    <td>
-                      <strong>{record.id}</strong>
-                    </td>
+                    <td><strong>{record.id}</strong></td>
 
                     <td>
                       {record.program} Sem {record.semester}
@@ -361,18 +404,11 @@ export function OverviewView({ db }: OverviewViewProps) {
                     <td>{record.batch || '—'}</td>
 
                     <td className="num">
-                      {record.count ??
-                        record.results?.length ??
-                        0}
+                      {record.count ?? record.results?.length ?? 0}
                     </td>
 
-                    <td className="num">
-                      {record.passed ?? '—'}
-                    </td>
-
-                    <td className="num">
-                      {record.failed ?? '—'}
-                    </td>
+                    <td className="num">{record.passed ?? '—'}</td>
+                    <td className="num">{record.failed ?? '—'}</td>
 
                     <td className="capitalize">
                       {record.status || 'calculated'}
@@ -380,9 +416,7 @@ export function OverviewView({ db }: OverviewViewProps) {
 
                     <td>
                       {record.createdAt
-                        ? new Date(
-                            record.createdAt
-                          ).toLocaleString()
+                        ? new Date(record.createdAt).toLocaleString('en-IN')
                         : '—'}
                     </td>
                   </tr>
@@ -395,56 +429,33 @@ export function OverviewView({ db }: OverviewViewProps) {
             No saved calculation records yet.
           </p>
         )}
-      </div>
+      </section>
 
       {/* Result workflow */}
-      <div className="card">
+      {/* <section className="card">
         <div className="card-header">
           <div className="card-title">
             <h2>Result Workflow</h2>
-            <small>
-              Standard examination processing pipeline
-            </small>
+            <small>Standard examination processing pipeline</small>
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(5, minmax(0, 1fr))',
-            gap: 10,
-          }}
-        >
+        <div className="dashboard-workflow">
           {[
-            ['01', 'Exam Session'],
-            ['02', 'Marks Entry'],
-            ['03', 'Calculation'],
-            ['04', 'Verification'],
-            ['05', 'Publication'],
-          ].map(([number, label]) => (
-            <div
-              key={number}
-              style={{
-                padding: '14px 12px',
-                border: '1px solid var(--line)',
-                borderRadius: 10,
-              }}
-            >
-              <small>{number}</small>
-
-              <div
-                style={{
-                  marginTop: 6,
-                  fontWeight: 600,
-                }}
-              >
-                {label}
-              </div>
+            ['01', 'Exam Session', 'Configure examination details'],
+            ['02', 'Marks Entry', 'Manage student mark foils'],
+            ['03', 'Calculation', 'Calculate marks and grades'],
+            ['04', 'Verification', 'Verify calculated results'],
+            ['05', 'Publication', 'Publish approved results'],
+          ].map(([number, label, description]) => (
+            <div className="dashboard-workflow-step" key={number}>
+              <span>{number}</span>
+              <strong>{label}</strong>
+              <small>{description}</small>
             </div>
           ))}
         </div>
-      </div>
-    </>
+      </section> */}
+    </div>
   );
 }

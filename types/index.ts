@@ -15,9 +15,22 @@ export type ExamSessionStatus =
 | 'Closed';
 
 export interface Student {
-r: string;
-n: string;
-p: ProgramKey;
+  // Existing internal fields used by the current Admin Panel
+  r: string;
+  n: string;
+  p: ProgramKey;
+
+  // Actual student record fields
+  batch: string;
+  programme: string;
+  autonomousRollNo: string;
+  collegeRollNo: string;
+  name: string;
+  dob: string;
+  abcId: string;
+  department: string;
+  course: string;
+  stream: string;
 }
 
 export type SubjectsMap = Record<string, string[]>;

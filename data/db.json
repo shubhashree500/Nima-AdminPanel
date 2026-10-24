@@ -82,13 +82,26 @@
   },
   "students": [],
   "marks": {},
-  "examSessions": [],
+  "examSessions": [
+    {
+      "id": "EXAM-1792828172298",
+      "academicYear": "2025-26",
+      "batch": 2025,
+      "program": "PG",
+      "department": "chemistry",
+      "semester": 1,
+      "examType": "Regular",
+      "status": "Published",
+      "createdAt": "2026-10-24T07:49:32.298Z",
+      "updatedAt": "2026-10-24T07:52:43.077Z"
+    }
+  ],
   "recheckingApplications": [],
   "resultCorrections": [
     {
-      "id": "CORR-1792218679441",
+      "id": "CORR-1792828795138",
       "status": "preview",
-      "originalCalculationId": "CALC-1792214857325",
+      "originalCalculationId": "CALC-1792828247240",
       "applicationId": null,
       "studentRoll": "ODIA25-001",
       "studentName": "MADHUSMITA ACHARYA",
@@ -99,10 +112,10 @@
       "department": "Odia",
       "paperCode": "1.1",
       "paperTitle": "PPKK",
-      "component": "sem",
-      "oldValue": 83,
-      "newValue": 57,
-      "reason": "recheck done",
+      "component": "practical",
+      "oldValue": null,
+      "newValue": 27,
+      "reason": "ioijojhuiuhn",
       "originalPaperResult": {
         "paperCode": "1.1",
         "subjectName": "PPKK",
@@ -116,461 +129,7 @@
       "revisedPaperResult": {
         "paperCode": "1.1",
         "subjectName": "PPKK",
-        "marks": 57,
-        "fullMark": 100,
-        "credit": 6,
-        "grade": "B",
-        "gradePoint": 6,
-        "creditPoint": 36
-      },
-      "originalStudentResult": {
-        "student": {
-          "College Roll No": "ODIA25-001",
-          "Autonomous Roll No": "111NAC25001",
-          "ExamCode": 459836,
-          "Applicant Name": "MADHUSMITA ACHARYA",
-          "Department": "Odia",
-          "Paper 1.1": "Purana O Prachina Kabya Kabita",
-          "Midsem-Mark": 26,
-          "Final-Mark": 57,
-          "Paper 1.2": "Adhunika Kabya Kabita1",
-          "Midsem-Mark_1": 25,
-          "Final-Mark_1": 56,
-          "Paper 1.3": "Katha sahitya",
-          "Midsem-Mark_2": 27,
-          "Final-Mark_2": 60,
-          "Paper 1.4": "Gadya sahitya",
-          "Midsem-Mark_3": 26,
-          "Final-Mark_3": 54,
-          "__EMPTY": "",
-          "__EMPTY_1": "",
-          "__EMPTY_2": "",
-          "__EMPTY_3": "",
-          "__EMPTY_4": "",
-          "__EMPTY_5": "",
-          "__EMPTY_6": "",
-          "__EMPTY_7": "",
-          "__EMPTY_8": "",
-          "__EMPTY_9": "",
-          "__EMPTY_10": "",
-          "__EMPTY_11": "",
-          "collegeRollNo": "ODIA25-001",
-          "autonomousRollNo": "111NAC25001",
-          "examCode": "459836",
-          "name": "MADHUSMITA ACHARYA",
-          "department": "Odia"
-        },
-        "subjects": [
-          {
-            "paperCode": "1.1",
-            "subjectName": "PPKK",
-            "marks": 83,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.2",
-            "subjectName": "Adhunika kabya kabita 1",
-            "marks": 81,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.3",
-            "subjectName": "Katha sahitya",
-            "marks": 87,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.4",
-            "subjectName": "Gadya sahitya",
-            "marks": 80,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          }
-        ],
-        "grandTotal": 331,
-        "totalMaximumMarks": 400,
-        "totalCredits": 24,
-        "totalCreditPoints": 216,
-        "sgpa": 9,
-        "percentage": 82.75
-      },
-      "revisedStudentResult": {
-        "student": {
-          "College Roll No": "ODIA25-001",
-          "Autonomous Roll No": "111NAC25001",
-          "ExamCode": 459836,
-          "Applicant Name": "MADHUSMITA ACHARYA",
-          "Department": "Odia",
-          "Paper 1.1": "Purana O Prachina Kabya Kabita",
-          "Midsem-Mark": 26,
-          "Final-Mark": 57,
-          "Paper 1.2": "Adhunika Kabya Kabita1",
-          "Midsem-Mark_1": 25,
-          "Final-Mark_1": 56,
-          "Paper 1.3": "Katha sahitya",
-          "Midsem-Mark_2": 27,
-          "Final-Mark_2": 60,
-          "Paper 1.4": "Gadya sahitya",
-          "Midsem-Mark_3": 26,
-          "Final-Mark_3": 54,
-          "__EMPTY": "",
-          "__EMPTY_1": "",
-          "__EMPTY_2": "",
-          "__EMPTY_3": "",
-          "__EMPTY_4": "",
-          "__EMPTY_5": "",
-          "__EMPTY_6": "",
-          "__EMPTY_7": "",
-          "__EMPTY_8": "",
-          "__EMPTY_9": "",
-          "__EMPTY_10": "",
-          "__EMPTY_11": "",
-          "collegeRollNo": "ODIA25-001",
-          "autonomousRollNo": "111NAC25001",
-          "examCode": "459836",
-          "name": "MADHUSMITA ACHARYA",
-          "department": "Odia",
-          "subjects": {
-            "1.1": {
-              "code": "1.1",
-              "paperCode": "1.1",
-              "subject": "PPKK",
-              "FinalMark": 57
-            }
-          }
-        },
-        "subjects": [
-          {
-            "paperCode": "1.1",
-            "subjectName": "PPKK",
-            "marks": 57,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "B",
-            "gradePoint": 6,
-            "creditPoint": 36
-          },
-          {
-            "paperCode": "1.2",
-            "subjectName": "Adhunika kabya kabita 1",
-            "marks": 81,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.3",
-            "subjectName": "Katha sahitya",
-            "marks": 87,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.4",
-            "subjectName": "Gadya sahitya",
-            "marks": 80,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          }
-        ],
-        "grandTotal": 305,
-        "totalMaximumMarks": 400,
-        "totalCredits": 24,
-        "totalCreditPoints": 198,
-        "sgpa": 8.25,
-        "percentage": 76.25
-      },
-      "createdAt": "2026-10-17T06:31:19.441Z",
-      "appliedAt": null,
-      "history": [
-        {
-          "action": "Correction preview generated",
-          "at": "2026-10-17T06:31:19.441Z"
-        }
-      ]
-    },
-    {
-      "id": "CORR-1792219453290",
-      "status": "preview",
-      "originalCalculationId": "CALC-1792214857325",
-      "applicationId": null,
-      "studentRoll": "ODIA25-001",
-      "studentName": "MADHUSMITA ACHARYA",
-      "program": "PG",
-      "semester": 1,
-      "batch": 2025,
-      "course": null,
-      "department": "Odia",
-      "paperCode": "1.1",
-      "paperTitle": "PPKK",
-      "component": "sem",
-      "oldValue": 57,
-      "newValue": 59,
-      "reason": "reched",
-      "originalPaperResult": {
-        "paperCode": "1.1",
-        "subjectName": "PPKK",
         "marks": 83,
-        "fullMark": 100,
-        "credit": 6,
-        "grade": "A+",
-        "gradePoint": 9,
-        "creditPoint": 54
-      },
-      "revisedPaperResult": {
-        "paperCode": "1.1",
-        "subjectName": "PPKK",
-        "marks": 59,
-        "fullMark": 100,
-        "credit": 6,
-        "grade": "B",
-        "gradePoint": 6,
-        "creditPoint": 36
-      },
-      "originalStudentResult": {
-        "student": {
-          "College Roll No": "ODIA25-001",
-          "Autonomous Roll No": "111NAC25001",
-          "ExamCode": 459836,
-          "Applicant Name": "MADHUSMITA ACHARYA",
-          "Department": "Odia",
-          "Paper 1.1": "Purana O Prachina Kabya Kabita",
-          "Midsem-Mark": 26,
-          "Final-Mark": 57,
-          "Paper 1.2": "Adhunika Kabya Kabita1",
-          "Midsem-Mark_1": 25,
-          "Final-Mark_1": 56,
-          "Paper 1.3": "Katha sahitya",
-          "Midsem-Mark_2": 27,
-          "Final-Mark_2": 60,
-          "Paper 1.4": "Gadya sahitya",
-          "Midsem-Mark_3": 26,
-          "Final-Mark_3": 54,
-          "__EMPTY": "",
-          "__EMPTY_1": "",
-          "__EMPTY_2": "",
-          "__EMPTY_3": "",
-          "__EMPTY_4": "",
-          "__EMPTY_5": "",
-          "__EMPTY_6": "",
-          "__EMPTY_7": "",
-          "__EMPTY_8": "",
-          "__EMPTY_9": "",
-          "__EMPTY_10": "",
-          "__EMPTY_11": "",
-          "collegeRollNo": "ODIA25-001",
-          "autonomousRollNo": "111NAC25001",
-          "examCode": "459836",
-          "name": "MADHUSMITA ACHARYA",
-          "department": "Odia"
-        },
-        "subjects": [
-          {
-            "paperCode": "1.1",
-            "subjectName": "PPKK",
-            "marks": 83,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.2",
-            "subjectName": "Adhunika kabya kabita 1",
-            "marks": 81,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.3",
-            "subjectName": "Katha sahitya",
-            "marks": 87,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.4",
-            "subjectName": "Gadya sahitya",
-            "marks": 80,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          }
-        ],
-        "grandTotal": 331,
-        "totalMaximumMarks": 400,
-        "totalCredits": 24,
-        "totalCreditPoints": 216,
-        "sgpa": 9,
-        "percentage": 82.75
-      },
-      "revisedStudentResult": {
-        "student": {
-          "College Roll No": "ODIA25-001",
-          "Autonomous Roll No": "111NAC25001",
-          "ExamCode": 459836,
-          "Applicant Name": "MADHUSMITA ACHARYA",
-          "Department": "Odia",
-          "Paper 1.1": "Purana O Prachina Kabya Kabita",
-          "Midsem-Mark": 26,
-          "Final-Mark": 59,
-          "Paper 1.2": "Adhunika Kabya Kabita1",
-          "Midsem-Mark_1": 25,
-          "Final-Mark_1": 56,
-          "Paper 1.3": "Katha sahitya",
-          "Midsem-Mark_2": 27,
-          "Final-Mark_2": 60,
-          "Paper 1.4": "Gadya sahitya",
-          "Midsem-Mark_3": 26,
-          "Final-Mark_3": 54,
-          "__EMPTY": "",
-          "__EMPTY_1": "",
-          "__EMPTY_2": "",
-          "__EMPTY_3": "",
-          "__EMPTY_4": "",
-          "__EMPTY_5": "",
-          "__EMPTY_6": "",
-          "__EMPTY_7": "",
-          "__EMPTY_8": "",
-          "__EMPTY_9": "",
-          "__EMPTY_10": "",
-          "__EMPTY_11": "",
-          "collegeRollNo": "ODIA25-001",
-          "autonomousRollNo": "111NAC25001",
-          "examCode": "459836",
-          "name": "MADHUSMITA ACHARYA",
-          "department": "Odia",
-          "subjects": {
-            "1.1": {
-              "code": "1.1",
-              "paperCode": "1.1",
-              "subject": "PPKK",
-              "FinalMark": 59
-            }
-          }
-        },
-        "subjects": [
-          {
-            "paperCode": "1.1",
-            "subjectName": "PPKK",
-            "marks": 59,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "B",
-            "gradePoint": 6,
-            "creditPoint": 36
-          },
-          {
-            "paperCode": "1.2",
-            "subjectName": "Adhunika kabya kabita 1",
-            "marks": 81,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.3",
-            "subjectName": "Katha sahitya",
-            "marks": 87,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          },
-          {
-            "paperCode": "1.4",
-            "subjectName": "Gadya sahitya",
-            "marks": 80,
-            "fullMark": 100,
-            "credit": 6,
-            "grade": "A+",
-            "gradePoint": 9,
-            "creditPoint": 54
-          }
-        ],
-        "grandTotal": 307,
-        "totalMaximumMarks": 400,
-        "totalCredits": 24,
-        "totalCreditPoints": 198,
-        "sgpa": 8.25,
-        "percentage": 76.75
-      },
-      "createdAt": "2026-10-17T06:44:13.290Z",
-      "appliedAt": null,
-      "history": [
-        {
-          "action": "Correction preview generated",
-          "at": "2026-10-17T06:44:13.290Z"
-        }
-      ]
-    },
-    {
-      "id": "CORR-1792221540022",
-      "status": "preview",
-      "originalCalculationId": "CALC-1792214857325",
-      "applicationId": null,
-      "studentRoll": "ODIA25-001",
-      "studentName": "MADHUSMITA ACHARYA",
-      "program": "PG",
-      "semester": 1,
-      "batch": 2025,
-      "course": null,
-      "department": "Odia",
-      "paperCode": "1.1",
-      "paperTitle": "PPKK",
-      "component": "sem",
-      "oldValue": 57,
-      "newValue": 58,
-      "reason": "check",
-      "originalPaperResult": {
-        "paperCode": "1.1",
-        "subjectName": "PPKK",
-        "marks": 83,
-        "fullMark": 100,
-        "credit": 6,
-        "grade": "A+",
-        "gradePoint": 9,
-        "creditPoint": 54
-      },
-      "revisedPaperResult": {
-        "paperCode": "1.1",
-        "subjectName": "PPKK",
-        "marks": 84,
         "fullMark": 100,
         "credit": 6,
         "grade": "A+",
@@ -672,7 +231,7 @@
           "Department": "Odia",
           "Paper 1.1": "Purana O Prachina Kabya Kabita",
           "Midsem-Mark": 26,
-          "Final-Mark": 58,
+          "Final-Mark": 57,
           "Paper 1.2": "Adhunika Kabya Kabita1",
           "Midsem-Mark_1": 25,
           "Final-Mark_1": 56,
@@ -705,7 +264,8 @@
               "paperCode": "1.1",
               "subject": "PPKK",
               "MidsemMark": 26,
-              "FinalMark": 58
+              "FinalMark": 57,
+              "PracticalMark": 27
             }
           }
         },
@@ -713,7 +273,7 @@
           {
             "paperCode": "1.1",
             "subjectName": "PPKK",
-            "marks": 84,
+            "marks": 83,
             "fullMark": 100,
             "credit": 6,
             "grade": "A+",
@@ -751,28 +311,28 @@
             "creditPoint": 54
           }
         ],
-        "grandTotal": 332,
+        "grandTotal": 331,
         "totalMaximumMarks": 400,
         "totalCredits": 24,
         "totalCreditPoints": 216,
         "sgpa": 9,
-        "percentage": 83
+        "percentage": 82.75
       },
-      "createdAt": "2026-10-17T07:19:00.022Z",
+      "createdAt": "2026-10-24T07:59:55.138Z",
       "appliedAt": null,
       "history": [
         {
           "action": "Correction preview generated",
-          "at": "2026-10-17T07:19:00.022Z"
+          "at": "2026-10-24T07:59:55.138Z"
         }
       ]
     }
   ],
   "calculatedResults": [
     {
-      "id": "CALC-1792214857325",
+      "id": "CALC-1792828247240",
       "status": "published",
-      "createdAt": "2026-10-17T05:27:37.325Z",
+      "createdAt": "2026-10-24T07:50:47.240Z",
       "program": "PG",
       "semester": 1,
       "batch": "2025",
@@ -10908,17 +10468,17 @@
           "percentage": 63
         }
       ],
-      "updatedAt": "2026-10-17T05:28:21.991Z",
+      "updatedAt": "2026-10-24T07:52:43.077Z",
       "statusHistory": [
         {
           "from": "calculated",
           "to": "verified",
-          "at": "2026-10-17T05:28:06.463Z"
+          "at": "2026-10-24T07:51:20.643Z"
         },
         {
           "from": "verified",
           "to": "published",
-          "at": "2026-10-17T05:28:21.991Z"
+          "at": "2026-10-24T07:52:43.077Z"
         }
       ]
     }

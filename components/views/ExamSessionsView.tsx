@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import type { DBData, ExamSession, ExamSessionStatus, ExamType, ProgramKey } from '@/types';
 import { PROG } from '@/types';
-import { getSubjects } from '@/lib/calculations';
 
 interface ExamSessionsViewProps {
   onSync?: () => Promise<void>;
@@ -864,15 +863,46 @@ interface SetupViewProps {
   onClearAll: () => Promise<void>;
 }
 
-function SetupView({ db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubjects, onResetDemo, onClearAll }: SetupViewProps) {
+type PaperGroupType = 'Major' | 'Minor' | 'MDC' | 'VAC' | 'Papers';
+type ConfiguredPaperGroup = { id: string; type: PaperGroupType; papers: string[] };
+type ConfiguredDepartment = {
+  id: string;
+  program: 'UG' | 'PG';
+  semester: number;
+  name: string;
+  groups: ConfiguredPaperGroup[];
+};
+
+const UG_GROUPS: PaperGroupType[] = ['Major', 'Minor', 'MDC', 'VAC'];
+
+function makeId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function makeConfiguredItem(program: 'UG' | 'PG', semester: number, name: string): ConfiguredDepartment {
+  const groupTypes: PaperGroupType[] = program === 'UG' ? UG_GROUPS : ['Papers'];
+  return {
+    id: makeId(),
+    program,
+    semester,
+    name,
+    groups: groupTypes.map(type => ({ id: makeId(), type, papers: [] })),
+  };
+}
+
+function SetupView({ db, onSaveSetup, onResetDemo, onClearAll }: SetupViewProps) {
   const [collegeName, setCollegeName] = useState(db.college);
   const [maxMarks, setMaxMarks] = useState(String(db.max));
   const [passMarks, setPassMarks] = useState(String(db.pass));
   const [cfgMsg, setCfgMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
-  const [subjProg, setSubjProg] = useState<ProgramKey>('UG');
-  const [subjSem, setSubjSem] = useState<number>(1);
-  const [newSubj, setNewSubj] = useState('');
-  const [subjMsg, setSubjMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
+  const [program, setProgram] = useState<'UG' | 'PG'>('UG');
+  const [semester, setSemester] = useState(1);
+  const [configuredItems, setConfiguredItems] = useState<ConfiguredDepartment[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [newName, setNewName] = useState('');
+  const [loadingStructure, setLoadingStructure] = useState(true);
+  const [savingStructure, setSavingStructure] = useState(false);
+  const [structureMsg, setStructureMsg] = useState<{ text: string; type: 'ok' | 'bad' } | null>(null);
   const [confirmAction, setConfirmAction] = useState<'' | 'demo' | 'all'>('');
   const [busy, setBusy] = useState(false);
 
@@ -881,6 +911,126 @@ function SetupView({ db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubje
     setMaxMarks(String(db.max));
     setPassMarks(String(db.pass));
   }, [db.college, db.max, db.pass]);
+
+  const loadStructure = async () => {
+    try {
+      setLoadingStructure(true);
+      const response = await fetch('/api/exam-structure');
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || 'Could not load exam structure.');
+      const items = Array.isArray(json.items) ? json.items as ConfiguredDepartment[] : [];
+      setConfiguredItems(items);
+      setSelectedId(current => items.some(item => item.id === current) ? current : '');
+    } catch (error) {
+      setStructureMsg({ text: error instanceof Error ? error.message : 'Could not load exam structure.', type: 'bad' });
+    } finally {
+      setLoadingStructure(false);
+    }
+  };
+
+  useEffect(() => { void loadStructure(); }, []);
+
+  const visibleItems = configuredItems.filter(item => item.program === program && item.semester === semester);
+  const selectedItem = visibleItems.find(item => item.id === selectedId) || null;
+
+  useEffect(() => {
+    if (!visibleItems.some(item => item.id === selectedId)) setSelectedId(visibleItems[0]?.id || '');
+    // Selection is intentionally reconciled when program/semester changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program, semester, configuredItems]);
+
+  const persistItems = async (next: ConfiguredDepartment[], successText = 'Exam structure saved.') => {
+    setSavingStructure(true);
+    setStructureMsg(null);
+    try {
+      const response = await fetch('/api/exam-structure', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: next }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || 'Could not save exam structure.');
+      const saved = Array.isArray(json.items) ? json.items as ConfiguredDepartment[] : next;
+      setConfiguredItems(saved);
+      setStructureMsg({ text: successText, type: 'ok' });
+    } catch (error) {
+      setStructureMsg({ text: error instanceof Error ? error.message : 'Could not save exam structure.', type: 'bad' });
+    } finally {
+      setSavingStructure(false);
+    }
+  };
+
+  const addConfiguredItem = async () => {
+    const name = newName.trim();
+    if (!name) {
+      setStructureMsg({ text: program === 'UG' ? 'Enter a department name.' : 'Enter a subject name.', type: 'bad' });
+      return;
+    }
+    if (visibleItems.some(item => item.name.toLowerCase() === name.toLowerCase())) {
+      setStructureMsg({ text: 'That name already exists for this program and semester.', type: 'bad' });
+      return;
+    }
+    const item = makeConfiguredItem(program, semester, name);
+    const next = [...configuredItems, item];
+    await persistItems(next, `${program === 'UG' ? 'Department' : 'Subject'} added.`);
+    setSelectedId(item.id);
+    setNewName('');
+  };
+
+  const updateSelected = (updater: (item: ConfiguredDepartment) => ConfiguredDepartment, successText = 'Changes saved.') => {
+    if (!selectedItem) return;
+    const next = configuredItems.map(item => item.id === selectedItem.id ? updater(item) : item);
+    void persistItems(next, successText);
+  };
+
+  const renameSelected = (name: string) => {
+    if (!selectedItem) return;
+    const clean = name.trim();
+    if (!clean) { setStructureMsg({ text: 'Name cannot be empty.', type: 'bad' }); return; }
+    if (visibleItems.some(item => item.id !== selectedItem.id && item.name.toLowerCase() === clean.toLowerCase())) {
+      setStructureMsg({ text: 'Another item already uses that name.', type: 'bad' }); return;
+    }
+    updateSelected(item => ({ ...item, name: clean }), 'Name updated.');
+  };
+
+  const addPaper = (groupId: string) => updateSelected(item => ({
+    ...item,
+    groups: item.groups.map(group => group.id === groupId ? { ...group, papers: [...group.papers, ''] } : group),
+  }), 'Paper field added. Enter its name and it will be saved.');
+
+  const updatePaper = (groupId: string, index: number, value: string) => {
+    if (!selectedItem) return;
+    const next = configuredItems.map(item => item.id !== selectedItem.id ? item : ({
+      ...item,
+      groups: item.groups.map(group => group.id !== groupId ? group : ({
+        ...group,
+        papers: group.papers.map((paper, paperIndex) => paperIndex === index ? value : paper),
+      })),
+    }));
+    setConfiguredItems(next);
+  };
+
+  const savePaperNames = async () => {
+    if (!selectedItem) return;
+    const next = configuredItems.map(item => item.id === selectedItem.id ? {
+      ...item,
+      groups: item.groups.map(group => ({ ...group, papers: group.papers.map(paper => paper.trim()) })),
+    } : item);
+    await persistItems(next, 'Paper names saved.');
+  };
+
+  const removePaper = (groupId: string, index: number) => updateSelected(item => ({
+    ...item,
+    groups: item.groups.map(group => group.id === groupId ? { ...group, papers: group.papers.filter((_, i) => i !== index) } : group),
+  }), 'Paper removed.');
+
+  const removeSelected = async () => {
+    if (!selectedItem) return;
+    if (!window.confirm(`Remove ${selectedItem.name} and its paper configuration from ${program} Semester ${semester}?`)) return;
+    const next = configuredItems.filter(item => item.id !== selectedItem.id);
+    await persistItems(next, `${program === 'UG' ? 'Department' : 'Subject'} removed.`);
+    setSelectedId('');
+  };
 
   const saveConfig = async () => {
     const m = Number(maxMarks), p = Number(passMarks);
@@ -891,39 +1041,6 @@ function SetupView({ db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubje
     try {
       const ok = await onSaveSetup(collegeName.trim() || 'Nimapara Autonomous College', m, p);
       setCfgMsg({ text: ok ? 'College and marks settings saved.' : 'Failed to save configuration.', type: ok ? 'ok' : 'bad' });
-    } finally { setBusy(false); }
-  };
-
-  const addSubject = async () => {
-    const name = newSubj.trim();
-    if (!name) { setSubjMsg({ text: 'Enter a subject name first.', type: 'bad' }); return; }
-    const current = getSubjects(db, subjProg, subjSem);
-    if (current.some(s => s.toLowerCase() === name.toLowerCase())) {
-      setSubjMsg({ text: 'That subject is already in this semester.', type: 'bad' }); return;
-    }
-    setBusy(true);
-    try {
-      const ok = await onAddSubject(subjProg, subjSem, name);
-      if (ok) { setNewSubj(''); setSubjMsg({ text: 'Subject added.', type: 'ok' }); }
-      else setSubjMsg({ text: 'Could not add subject.', type: 'bad' });
-    } finally { setBusy(false); }
-  };
-
-  const removeSubject = async (index: number, name: string) => {
-    if (!window.confirm(`Remove subject “${name}” from ${PROG[subjProg].full}, Semester ${subjSem}?`)) return;
-    setBusy(true);
-    try {
-      const ok = await onRemoveSubject(subjProg, subjSem, index);
-      setSubjMsg({ text: ok ? 'Subject removed.' : 'Could not remove subject.', type: ok ? 'ok' : 'bad' });
-    } finally { setBusy(false); }
-  };
-
-  const copySubjects = async () => {
-    if (!window.confirm(`Copy this subject list to every semester of ${PROG[subjProg].full}?`)) return;
-    setBusy(true);
-    try {
-      const ok = await onCopySubjects(subjProg, subjSem);
-      setSubjMsg({ text: ok ? `Subject list copied to every semester of ${PROG[subjProg].full}.` : 'Could not copy subjects.', type: ok ? 'ok' : 'bad' });
     } finally { setBusy(false); }
   };
 
@@ -941,12 +1058,12 @@ function SetupView({ db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubje
     } finally { setBusy(false); }
   };
 
-  const subjects = getSubjects(db, subjProg, subjSem);
   return (
     <>
       <div className="view-header">
-        <div><h1>Exam Setup</h1><p className="sub">Configure college-wide marks settings and manage subjects by program and semester.</p></div>
+        <div><h1>Exam Setup</h1><p className="sub">Configure college settings and define UG departments, PG subjects, paper groups and paper names.</p></div>
       </div>
+
       <div className="card">
         <h2>College and marks settings</h2>
         <p className="hint">These are the existing general settings. Program-specific UG/PG calculation engines remain unchanged.</p>
@@ -958,23 +1075,67 @@ function SetupView({ db, onSaveSetup, onAddSubject, onRemoveSubject, onCopySubje
         </div>
         {cfgMsg && <div className={`msg ${cfgMsg.type}`} role="status">{cfgMsg.text}</div>}
       </div>
+
       <div className="card">
-        <h2>Subject manager</h2>
-        <p className="hint">Choose a program and semester to view, add, or remove subjects.</p>
+        <h2>Departments, subjects and papers</h2>
+        <p className="hint">Choose UG or PG and a semester. UG uses Major, Minor, MDC and VAC groups. PG uses a configurable paper list for each subject.</p>
         <div className="row">
-          <label>Program<select value={subjProg} onChange={e => { setSubjProg(e.target.value as ProgramKey); setSubjSem(1); setSubjMsg(null); }}>{(Object.keys(PROG) as ProgramKey[]).map(p => <option key={p} value={p}>{PROG[p].full}</option>)}</select></label>
-          <label>Semester<select value={subjSem} onChange={e => { setSubjSem(Number(e.target.value)); setSubjMsg(null); }}>{Array.from({ length: PROG[subjProg].sems }, (_, i) => i + 1).map(n => <option key={n} value={n}>Semester {n}</option>)}</select></label>
+          <label>Program<select value={program} onChange={e => { setProgram(e.target.value as 'UG' | 'PG'); setSemester(1); setStructureMsg(null); setSelectedId(''); }}><option value="UG">UG</option><option value="PG">PG</option></select></label>
+          <label>Semester<select value={semester} onChange={e => { setSemester(Number(e.target.value)); setStructureMsg(null); setSelectedId(''); }}>{Array.from({ length: PROG[program].sems }, (_, i) => i + 1).map(n => <option key={n} value={n}>Semester {n}</option>)}</select></label>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
-          {subjects.length ? subjects.map((name, i) => <span key={`${name}-${i}`} className="tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{name}<button type="button" aria-label={`Remove ${name}`} disabled={busy} onClick={() => removeSubject(i, name)}>×</button></span>) : <div className="empty">No subjects configured for this semester yet.</div>}
-        </div>
+
         <div className="row" style={{ marginTop: 14 }}>
-          <label>New subject<input placeholder="e.g. Zoology" value={newSubj} onChange={e => { setNewSubj(e.target.value); setSubjMsg(null); }} onKeyDown={e => { if (e.key === 'Enter') void addSubject(); }} /></label>
-          <button className="btn primary" onClick={addSubject} disabled={busy}>{busy ? 'Working…' : 'Add subject'}</button>
-          <button className="btn" onClick={copySubjects} disabled={busy || subjects.length === 0}>Copy to all semesters</button>
+          <label>{program === 'UG' ? 'New department name' : 'New subject name'}<input placeholder={program === 'UG' ? 'e.g. Economics' : 'e.g. Odia'} value={newName} onChange={e => { setNewName(e.target.value); setStructureMsg(null); }} onKeyDown={e => { if (e.key === 'Enter') void addConfiguredItem(); }} /></label>
+          <button className="btn primary" onClick={() => void addConfiguredItem()} disabled={savingStructure || loadingStructure}>{savingStructure ? 'Saving…' : program === 'UG' ? 'Add department' : 'Add subject'}</button>
+          <button className="btn" onClick={() => void loadStructure()} disabled={loadingStructure || savingStructure}>{loadingStructure ? 'Loading…' : 'Refresh structure'}</button>
         </div>
-        {subjMsg && <div className={`msg ${subjMsg.type}`} role="status">{subjMsg.text}</div>}
+
+        {structureMsg && <div className={`msg ${structureMsg.type}`} role="status">{structureMsg.text}</div>}
+        {loadingStructure ? <div className="empty">Loading configured departments and subjects…</div> : (
+          <>
+            <div style={{ marginTop: 18 }}>
+              <label>{program === 'UG' ? 'Configured departments' : 'Configured PG subjects'}
+                <select value={selectedId} onChange={e => setSelectedId(e.target.value)} style={{ width: '100%', marginTop: 6 }}>
+                  <option value="">Select {program === 'UG' ? 'a department' : 'a subject'}</option>
+                  {visibleItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {!selectedItem ? <div className="empty" style={{ marginTop: 12 }}>No {program === 'UG' ? 'department' : 'subject'} configured for this semester. Add one above to define its papers.</div> : (
+              <div style={{ marginTop: 18 }}>
+                <div className="row" style={{ alignItems: 'end' }}>
+                  <label>{program === 'UG' ? 'Department name' : 'Subject name'}<input key={selectedItem.id} defaultValue={selectedItem.name} onBlur={e => { if (e.target.value.trim() !== selectedItem.name) renameSelected(e.target.value); }} /></label>
+                  <button className="btn danger" onClick={() => void removeSelected()} disabled={savingStructure}>Remove {program === 'UG' ? 'department' : 'subject'}</button>
+                </div>
+
+                <h3 style={{ marginTop: 20 }}>Paper configuration — {selectedItem.name}</h3>
+                {selectedItem.groups.map(group => (
+                  <div key={group.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginTop: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div>
+                        <h4 style={{ margin: 0 }}>{group.type === 'Papers' ? 'Subject papers' : `${group.type} papers`}</h4>
+                        <p className="hint" style={{ margin: '4px 0 0' }}>{group.papers.length} paper{group.papers.length === 1 ? '' : 's'} configured</p>
+                      </div>
+                      <button className="btn" onClick={() => addPaper(group.id)} disabled={savingStructure}>+ Add paper</button>
+                    </div>
+                    {group.papers.length === 0 ? <p className="empty">No papers added to this group yet.</p> : group.papers.map((paper, index) => (
+                      <div key={`${group.id}-${index}`} className="row" style={{ marginTop: 10, alignItems: 'end' }}>
+                        <label>{group.type === 'Papers' ? 'Paper' : group.type} {index + 1} name<input value={paper} placeholder={program === 'UG' && group.type === 'Major' ? `${selectedItem.name} Paper ${index + 1}` : `Enter ${group.type} paper name`} onChange={e => updatePaper(group.id, index, e.target.value)} /></label>
+                        <button type="button" className="btn danger" onClick={() => removePaper(group.id, index)} disabled={savingStructure}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn primary" onClick={() => void savePaperNames()} disabled={savingStructure}>{savingStructure ? 'Saving…' : 'Save paper names'}</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
+
       <div className="card">
         <h2>Data maintenance</h2>
         <p className="hint">These actions affect student/mark data, not just the selected exam session. Use only when you intend to reset or clear data.</p>
