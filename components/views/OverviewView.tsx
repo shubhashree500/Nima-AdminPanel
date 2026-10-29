@@ -94,16 +94,20 @@ export function OverviewView({ db }: OverviewViewProps) {
 
         const evaluated = p + f;
 
+        const enrolledCount = (db.students || []).filter(
+          (student) => student.p === program
+        ).length;
+
         return {
           program,
-          students: results.length,
+          students: record ? results.length : enrolledCount,
           results: results.length,
           passed: p,
           failed: f,
           rate: evaluated
             ? displayPct((p / evaluated) * 100)
             : '—',
-          status: record?.status || '—',
+          status: record?.status || (enrolledCount ? 'uncalculated' : '—'),
           semester: record?.semester,
         };
       });

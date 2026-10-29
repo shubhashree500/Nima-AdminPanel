@@ -17,6 +17,29 @@ function studentOf(record: any) {
   return record?.student || record || {};
 }
 
+function rollsOf(result: any): string[] {
+  const s = studentOf(result);
+  return [
+    s['College Roll No'],
+    s['College Roll No.'],
+    s['Roll No'],
+    s['Roll No.'],
+    s['College Roll'],
+    s.collegeRollNo,
+    s.roll,
+    s.rollNo,
+    s.r,
+    s.Roll,
+    s['Autonomous Roll No'],
+    s['Autonomous Roll No.'],
+    s.autonomousRollNo,
+    result?.studentRoll,
+    result?.roll,
+  ]
+    .map((item) => String(item ?? '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function rollOf(record: any): string {
   const student = studentOf(record);
 
@@ -86,6 +109,7 @@ function statusOf(record: any): string {
 
 export function StudentResultsView() {
   const [records, setRecords] = useState<Calculation[]>([]);
+  const [corrections, setCorrections] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
   const [department, setDepartment] = useState('All');
@@ -99,15 +123,19 @@ export function StudentResultsView() {
     setSelectedIndex(null);
 
     try {
-      const response = await fetch('/api/verify', {
-        cache: 'no-store',
-      });
+      const [response, correctionsResponse] = await Promise.all([
+        fetch('/api/verify', { cache: 'no-store' }),
+        fetch('/api/result-corrections', { cache: 'no-store' }),
+      ]);
 
       const json = await response.json();
+      const correctionsJson = await correctionsResponse.json();
 
       if (!response.ok || !json.success) {
         throw new Error(json.error || 'Unable to load saved results.');
       }
+
+      setCorrections(Array.isArray(correctionsJson.data) ? correctionsJson.data : []);
 
       const data: Calculation[] = (
         Array.isArray(json.data) ? json.data : []
@@ -141,30 +169,79 @@ export function StudentResultsView() {
 
   const selected = records.find((record) => record.id === selectedId);
 
+  const displayResults = useMemo(() => {
+    const originalResults = selected?.results || [];
+    if (!selected) return [];
+
+    const latestByRoll = new Map<string, any>();
+    const matching = corrections
+      .filter(
+        (c) =>
+          c.status === 'applied' &&
+          c.originalCalculationId === selected.id &&
+          c.revisedStudentResult
+      )
+      .sort((a, b) =>
+        String(a.appliedAt || a.createdAt || '').localeCompare(
+          String(b.appliedAt || b.createdAt || '')
+        )
+      );
+
+    for (const c of matching) {
+      const candRolls = [
+        String(c.studentRoll || '').trim().toLowerCase(),
+        ...rollsOf(c.revisedStudentResult),
+        ...rollsOf(c.originalStudentResult),
+      ].filter(Boolean);
+      for (const r of candRolls) {
+        latestByRoll.set(r, c);
+      }
+    }
+
+    return originalResults.map((orig) => {
+      const candRolls = rollsOf(orig);
+      let corr: any = null;
+      for (const r of candRolls) {
+        if (latestByRoll.has(r)) {
+          corr = latestByRoll.get(r);
+          break;
+        }
+      }
+      if (!corr) return orig;
+      return {
+        ...corr.revisedStudentResult,
+        isRevised: true,
+        revisedAt: corr.appliedAt || corr.createdAt,
+        revisedPaper: corr.paperCode,
+        correctionId: corr.id,
+      };
+    });
+  }, [selected, corrections]);
+
   const departments = useMemo(
     () => [
       'All',
       ...Array.from(
         new Set(
-          (selected?.results || [])
+          displayResults
             .map(deptOf)
             .filter((value) => value && value !== '-')
         )
       ).sort(),
     ],
-    [selected]
+    [displayResults]
   );
 
   const rows = useMemo(
     () =>
-      (selected?.results || []).filter(
+      displayResults.filter(
         (record) =>
           (department === 'All' || deptOf(record) === department) &&
           `${nameOf(record)} ${rollOf(record)} ${deptOf(record)}`
             .toLowerCase()
             .includes(query.trim().toLowerCase())
       ),
-    [selected, department, query]
+    [displayResults, department, query]
   );
 
   const selectedStudent =

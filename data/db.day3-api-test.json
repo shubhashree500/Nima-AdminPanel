@@ -1,0 +1,499 @@
+{
+  "college": "Your College Name",
+  "max": 100,
+  "pass": 40,
+  "subjects": {
+    "UG|1": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|2": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|3": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|4": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|5": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|6": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "PG|1": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|2": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|3": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|4": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ]
+  },
+  "students": [],
+  "marks": {},
+  "examSessions": [],
+  "calculatedResults": [
+    {
+      "id": "CALC-DAY3-TEST-001",
+      "status": "published",
+      "createdAt": "2026-10-28T12:08:03.152Z",
+      "program": "UG",
+      "semester": 1,
+      "batch": "2025",
+      "course": "BBA",
+      "department": "",
+      "engine": "DAY3-API-TEST-FIXTURE",
+      "count": 1,
+      "passed": 1,
+      "failed": 0,
+      "departments": [],
+      "results": [
+        {
+          "student": {
+            "rollNo": "BBA25TEST001",
+            "collegeRollNo": "BBA25TEST001",
+            "name": "Day Three Test Student",
+            "studentName": "Day Three Test Student",
+            "course": "BBA",
+            "batch": "2025"
+          },
+          "subjects": [
+            {
+              "paperCode": "CC-101",
+              "subjectName": "Major CP 1",
+              "category": "Major CP 1",
+              "marks": 65,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B+",
+              "gradePoint": 7,
+              "creditPoint": 28
+            },
+            {
+              "paperCode": "CC-102",
+              "subjectName": "Major CP 2",
+              "category": "Major CP 2",
+              "marks": 72,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "A",
+              "gradePoint": 8,
+              "creditPoint": 32
+            },
+            {
+              "paperCode": "CC-103",
+              "subjectName": "Minor",
+              "category": "Minor",
+              "marks": 68,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B+",
+              "gradePoint": 7,
+              "creditPoint": 28
+            },
+            {
+              "paperCode": "MDE-101",
+              "subjectName": "Multidisciplinary Elective",
+              "category": "MDE",
+              "marks": 75,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "A",
+              "gradePoint": 8,
+              "creditPoint": 32
+            },
+            {
+              "paperCode": "AEC-101",
+              "subjectName": "Ability Enhancement Course I",
+              "category": "AEC",
+              "marks": 70,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "A",
+              "gradePoint": 8,
+              "creditPoint": 32
+            },
+            {
+              "paperCode": "AEC-102",
+              "subjectName": "Ability Enhancement Course II",
+              "category": "AEC",
+              "marks": 66,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B+",
+              "gradePoint": 7,
+              "creditPoint": 28
+            },
+            {
+              "paperCode": "VAC-101",
+              "subjectName": "Value Added Course",
+              "category": "VAC",
+              "marks": 80,
+              "fullMark": 100,
+              "credit": 3,
+              "grade": "A+",
+              "gradePoint": 9,
+              "creditPoint": 27
+            }
+          ],
+          "totalCredits": 27,
+          "totalCreditPoints": 207,
+          "sgpa": 7.6667,
+          "percentage": 70.86,
+          "usedGrace": 0,
+          "remainingGrace": 8
+        }
+      ],
+      "updatedAt": "2026-10-28T12:08:43.305Z",
+      "statusHistory": [
+        {
+          "from": "calculated",
+          "to": "verified",
+          "at": "2026-10-28T12:08:37.889Z"
+        },
+        {
+          "from": "verified",
+          "to": "published",
+          "at": "2026-10-28T12:08:43.305Z"
+        }
+      ]
+    }
+  ],
+  "recheckingApplications": [
+    {
+      "id": "RECHECK-1793189391999",
+      "studentRoll": "BBA25TEST001",
+      "studentName": "Day Three Test Student",
+      "program": "UG",
+      "semester": 1,
+      "batch": "2025",
+      "paperCode": "CC-101",
+      "reason": "Day 3 API integration test",
+      "requestedMarks": null,
+      "originalCalculationId": "CALC-DAY3-TEST-001",
+      "originalMarks": 65,
+      "originalFullMark": 100,
+      "originalGrade": "B+",
+      "originalGradePoint": 7,
+      "status": "Approved",
+      "decisionNotes": "Day 3 test: approved for correction",
+      "correctionId": null,
+      "createdAt": "2026-10-28T12:09:51.999Z",
+      "updatedAt": "2026-10-28T12:10:59.019Z",
+      "history": [
+        {
+          "action": "Application submitted",
+          "at": "2026-10-28T12:09:51.999Z"
+        },
+        {
+          "action": "Status changed to Under Review",
+          "at": "2026-10-28T12:10:54.286Z"
+        },
+        {
+          "action": "Status changed to Approved",
+          "at": "2026-10-28T12:10:59.019Z"
+        }
+      ]
+    }
+  ],
+  "resultCorrections": [
+    {
+      "id": "CORR-1793189513854",
+      "status": "preview",
+      "originalCalculationId": "CALC-DAY3-TEST-001",
+      "applicationId": null,
+      "studentRoll": "BBA25TEST001",
+      "studentName": "Day Three Test Student",
+      "program": "UG",
+      "semester": 1,
+      "batch": 2025,
+      "course": "BBA",
+      "department": null,
+      "paperCode": "CC-101",
+      "paperTitle": "Major CP 1",
+      "component": "midsem",
+      "oldValue": null,
+      "newValue": 15,
+      "reason": "Day 3 test: preview corrected midsem mark",
+      "originalPaperResult": {
+        "paperCode": "CC-101",
+        "subjectName": "Major CP 1",
+        "category": "Major CP 1",
+        "marks": 65,
+        "fullMark": 100,
+        "credit": 4,
+        "grade": "B+",
+        "gradePoint": 7,
+        "creditPoint": 28
+      },
+      "revisedPaperResult": {
+        "paperCode": "CC-101",
+        "subjectName": "Major CP 1",
+        "category": "Major CP 1",
+        "marks": 15,
+        "fullMark": 100,
+        "credit": 4,
+        "grade": "F",
+        "gradePoint": 0,
+        "creditPoint": 0
+      },
+      "originalStudentResult": {
+        "student": {
+          "rollNo": "BBA25TEST001",
+          "collegeRollNo": "BBA25TEST001",
+          "name": "Day Three Test Student",
+          "studentName": "Day Three Test Student",
+          "course": "BBA",
+          "batch": "2025"
+        },
+        "subjects": [
+          {
+            "paperCode": "CC-101",
+            "subjectName": "Major CP 1",
+            "category": "Major CP 1",
+            "marks": 65,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "B+",
+            "gradePoint": 7,
+            "creditPoint": 28
+          },
+          {
+            "paperCode": "CC-102",
+            "subjectName": "Major CP 2",
+            "category": "Major CP 2",
+            "marks": 72,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "A",
+            "gradePoint": 8,
+            "creditPoint": 32
+          },
+          {
+            "paperCode": "CC-103",
+            "subjectName": "Minor",
+            "category": "Minor",
+            "marks": 68,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "B+",
+            "gradePoint": 7,
+            "creditPoint": 28
+          },
+          {
+            "paperCode": "MDE-101",
+            "subjectName": "Multidisciplinary Elective",
+            "category": "MDE",
+            "marks": 75,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "A",
+            "gradePoint": 8,
+            "creditPoint": 32
+          },
+          {
+            "paperCode": "AEC-101",
+            "subjectName": "Ability Enhancement Course I",
+            "category": "AEC",
+            "marks": 70,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "A",
+            "gradePoint": 8,
+            "creditPoint": 32
+          },
+          {
+            "paperCode": "AEC-102",
+            "subjectName": "Ability Enhancement Course II",
+            "category": "AEC",
+            "marks": 66,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "B+",
+            "gradePoint": 7,
+            "creditPoint": 28
+          },
+          {
+            "paperCode": "VAC-101",
+            "subjectName": "Value Added Course",
+            "category": "VAC",
+            "marks": 80,
+            "fullMark": 100,
+            "credit": 3,
+            "grade": "A+",
+            "gradePoint": 9,
+            "creditPoint": 27
+          }
+        ],
+        "totalCredits": 27,
+        "totalCreditPoints": 207,
+        "sgpa": 7.6667,
+        "percentage": 70.86,
+        "usedGrace": 0,
+        "remainingGrace": 8
+      },
+      "revisedStudentResult": {
+        "student": {
+          "rollNo": "BBA25TEST001",
+          "collegeRollNo": "BBA25TEST001",
+          "name": "Day Three Test Student",
+          "studentName": "Day Three Test Student",
+          "course": "BBA",
+          "batch": "2025",
+          "subjects": {
+            "CC-101": {
+              "code": "CC-101",
+              "paperCode": "CC-101",
+              "subject": "Major CP 1",
+              "MidsemMark": 15
+            }
+          }
+        },
+        "subjects": [
+          {
+            "paperCode": "CC-101",
+            "subjectName": "Major CP 1",
+            "category": "Major CP 1",
+            "marks": 15,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          },
+          {
+            "paperCode": "CC-102",
+            "subjectName": "Major CP 2",
+            "category": "Major CP 2",
+            "marks": 0,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          },
+          {
+            "paperCode": "CC-103",
+            "subjectName": "Minor",
+            "category": "Minor",
+            "marks": 0,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          },
+          {
+            "paperCode": "MDE-101",
+            "subjectName": "Multidisciplinary Elective",
+            "category": "MDE",
+            "marks": 0,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          },
+          {
+            "paperCode": "AEC-101",
+            "subjectName": "Ability Enhancement Course I",
+            "category": "AEC",
+            "marks": 0,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          },
+          {
+            "paperCode": "AEC-102",
+            "subjectName": "Ability Enhancement Course II",
+            "category": "AEC",
+            "marks": 0,
+            "fullMark": 100,
+            "credit": 4,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          },
+          {
+            "paperCode": "VAC-101",
+            "subjectName": "Value Added Course",
+            "category": "VAC",
+            "marks": 0,
+            "fullMark": 100,
+            "credit": 3,
+            "grade": "F",
+            "gradePoint": 0,
+            "creditPoint": 0
+          }
+        ],
+        "totalCredits": 27,
+        "totalCreditPoints": 0,
+        "sgpa": 0,
+        "percentage": 2.14,
+        "usedGrace": 0,
+        "remainingGrace": 8
+      },
+      "createdAt": "2026-10-28T12:11:53.854Z",
+      "appliedAt": null,
+      "history": [
+        {
+          "action": "Correction preview generated",
+          "at": "2026-10-28T12:11:53.854Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 
@@ -235,21 +235,33 @@ const sections: MenuSection[] = [
     icon: 'calendar',
     items: [
       { id: 'exam-sessions', label: 'Exam Setup & Sessions', icon: 'calendar' },
+      { id: 'setup', label: 'College Setup & Subjects', icon: 'setup' },
       { id: 'students', label: 'Students', icon: 'students' },
+      { id: 'marks', label: 'Marks Entry', icon: 'marks' },
     ],
   },
   {
-  id: 'processing',
-  label: 'Result Processing',
-  icon: 'calculator',
-  items: [
-    {
-      id: 'process',
-      label: 'Result Processing',
-      icon: 'calculator',
-    },
-  ],
-},
+    id: 'processing',
+    label: 'Result Processing',
+    icon: 'calculator',
+    items: [
+      {
+        id: 'process',
+        label: 'Result Processing (Calculate)',
+        icon: 'calculator',
+      },
+      {
+        id: 'verify',
+        label: 'Verification',
+        icon: 'verify',
+      },
+      {
+        id: 'publish',
+        label: 'Publication',
+        icon: 'publish',
+      },
+    ],
+  },
   {
     id: 'results',
     label: 'Results & Reports',
@@ -276,7 +288,7 @@ const sections: MenuSection[] = [
     items: [
       {
         id: 'rechecking',
-        label: 'Applications',
+        label: 'Rechecking & Corrections',
         icon: 'refresh',
       },
     ],
@@ -295,7 +307,7 @@ export function Sidebar({
     examination: true,
     processing: true,
     results: true,
-    rechecking: false,
+    rechecking: true,
   });
 
   const toggleSection = (sectionId: string) => {
@@ -441,4 +453,3 @@ export function Sidebar({
     </aside>
   );
 }
-

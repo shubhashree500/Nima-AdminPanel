@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -13,6 +12,8 @@ import { ExamSessionsView } from './views/ExamSessionsView';
 import { ReportsView } from './views/ReportsView';
 import { RecheckingView } from './views/RecheckingView';
 import { ResultProcessingView } from './views/ResultProcessingView';
+import { VerifyView } from './views/VerifyView';
+import { PublishView } from './views/PublishView';
 
 interface AdminPanelProps {
   initialData: DBData;
@@ -93,6 +94,40 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     return false;
   };
 
+  // Update student
+  const handleUpdateStudent = async (
+    originalRoll: string,
+    student: Student
+  ): Promise<boolean> => {
+    setIsSyncing(true);
+
+    try {
+      const res = await fetch('/api/students', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalRoll,
+          ...student,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (json.success && json.data) {
+        setDb(json.data);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error updating student:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+
+    return false;
+  };
+
   // Delete student
   const handleDeleteStudent = async (
     roll: string
@@ -109,6 +144,8 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
 
       if (json.success && json.data) {
         setDb(json.data);
+      } else if (json.error) {
+        alert(json.error);
       }
     } catch (error) {
       console.error('Error deleting student:', error);
@@ -166,6 +203,8 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
       if (json.success && json.data) {
         setDb(json.data);
         return true;
+      } else if (json.error) {
+        alert(json.error);
       }
     } catch (error) {
       console.error('Error saving marks:', error);
@@ -389,6 +428,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           <StudentsView
             db={db}
             onAddStudent={handleAddStudent}
+            onUpdateStudent={handleUpdateStudent}
             onDeleteStudent={handleDeleteStudent}
             onImportStudents={handleImportStudents}
           />
@@ -403,6 +443,10 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         )}
 
         {page === 'process' && <ResultProcessingView />}
+
+        {page === 'verify' && <VerifyView />}
+
+        {page === 'publish' && <PublishView />}
 
         {page === 'results' && <StudentResultsView />}
 

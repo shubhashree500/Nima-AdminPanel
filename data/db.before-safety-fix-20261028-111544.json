@@ -1,0 +1,88 @@
+{
+  "college": "Nimapara Autonomous College",
+  "max": 100,
+  "pass": 40,
+  "subjects": {
+    "UG|1": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|2": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|3": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|4": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|5": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|6": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "PG|1": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|2": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|3": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|4": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ]
+  },
+  "students": [],
+  "marks": {},
+  "examSessions": [],
+  "recheckingApplications": [],
+  "resultCorrections": []
+}

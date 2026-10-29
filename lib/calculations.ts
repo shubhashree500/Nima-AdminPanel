@@ -15,10 +15,12 @@ export function findStudent(
 ): Student | undefined {
   const normalizedRoll = String(roll).trim().toLowerCase();
 
-  return db.students?.find(
-    (student) =>
-      String(student.r).trim().toLowerCase() === normalizedRoll
-  );
+  return db.students?.find((student) => {
+    const r = String(student.r || '').trim().toLowerCase();
+    const auto = String(student.autonomousRollNo || '').trim().toLowerCase();
+    const college = String(student.collegeRollNo || '').trim().toLowerCase();
+    return r === normalizedRoll || auto === normalizedRoll || college === normalizedRoll;
+  });
 }
 
 export function formatPct(

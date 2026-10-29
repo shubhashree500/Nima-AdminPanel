@@ -1,0 +1,299 @@
+{
+  "college": "Nimapara Autonomous College",
+  "max": 100,
+  "pass": 40,
+  "subjects": {
+    "UG|1": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|2": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|3": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|4": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|5": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|6": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "PG|1": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|2": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|3": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|4": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ]
+  },
+  "students": [
+    {
+      "batch": "2025",
+      "programme": "UG",
+      "autonomousRollNo": "BBA25-001",
+      "collegeRollNo": "BBA-COL-001",
+      "name": "TEST UG STUDENT",
+      "dob": "01-01-2005",
+      "abcId": "12345",
+      "department": "",
+      "course": "BBA",
+      "stream": "COMMERCE",
+      "r": "BBA25-001",
+      "n": "TEST UG STUDENT",
+      "p": "UG"
+    },
+    {
+      "batch": "2025",
+      "programme": "UG",
+      "autonomousRollNo": "NEW-ROLL-101",
+      "collegeRollNo": "COL-101",
+      "name": "MIGRATION STUDENT",
+      "dob": "05-05-2005",
+      "abcId": "55555",
+      "department": "",
+      "course": "BBA",
+      "stream": "COMMERCE",
+      "r": "NEW-ROLL-101",
+      "n": "MIGRATION STUDENT",
+      "p": "UG"
+    }
+  ],
+  "marks": {
+    "BBA25-001|1": {
+      "CC-101": 84
+    },
+    "NEW-ROLL-101|1": {
+      "CC-101": 75,
+      "CC-102": 80
+    }
+  },
+  "examSessions": [
+    {
+      "id": "EXAM-LINKED-1",
+      "academicYear": "2025-26",
+      "batch": 2025,
+      "program": "UG",
+      "course": "BBA",
+      "semester": 1,
+      "examType": "Regular",
+      "status": "Published"
+    }
+  ],
+  "calculatedResults": [
+    {
+      "id": "CALC-STATE-TEST-1793254456595",
+      "status": "published",
+      "program": "UG",
+      "semester": 1,
+      "batch": 2025,
+      "course": "BBA",
+      "department": "",
+      "count": 1,
+      "passed": 1,
+      "failed": 0,
+      "createdAt": "2026-10-29T06:14:16.595Z",
+      "results": [
+        {
+          "student": {
+            "r": "BBA25-001",
+            "name": "TEST UG STUDENT",
+            "p": "BBA",
+            "subjects": {
+              "CC-101": {
+                "FinalMark": 80,
+                "MidsemMark": 18,
+                "Attandance": 5,
+                "SurpriseTest": 8,
+                "Assignment": 5
+              },
+              "CC-102": {
+                "FinalMark": 70,
+                "MidsemMark": 15,
+                "Attandance": 5,
+                "SurpriseTest": 8,
+                "Assignment": 5
+              },
+              "CC-103": {
+                "FinalMark": 60,
+                "MidsemMark": 15,
+                "Attandance": 5,
+                "SurpriseTest": 8,
+                "Assignment": 5
+              },
+              "MDE-101": {
+                "FinalMark": 55,
+                "MidsemMark": 12,
+                "Attandance": 5,
+                "SurpriseTest": 7,
+                "Assignment": 5
+              },
+              "AEC-101": {
+                "FinalMark": 50,
+                "MidsemMark": 12,
+                "Attandance": 5,
+                "SurpriseTest": 7,
+                "Assignment": 5
+              },
+              "AEC-102": {
+                "FinalMark": 45,
+                "MidsemMark": 10,
+                "Attandance": 5,
+                "SurpriseTest": 6,
+                "Assignment": 5
+              },
+              "VAC-101": {
+                "FinalMark": 40,
+                "MidsemMark": 10,
+                "Attandance": 5,
+                "SurpriseTest": 6,
+                "Assignment": 5
+              }
+            }
+          },
+          "subjects": [
+            {
+              "paperCode": "CC-101",
+              "subjectName": "Major CP 1",
+              "category": "Major CP 1",
+              "marks": 84,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "A+",
+              "gradePoint": 9,
+              "creditPoint": 36
+            },
+            {
+              "paperCode": "CC-102",
+              "subjectName": "Major CP 2",
+              "category": "Major CP 2",
+              "marks": 75,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "A",
+              "gradePoint": 8,
+              "creditPoint": 32
+            },
+            {
+              "paperCode": "CC-103",
+              "subjectName": "Minor",
+              "category": "Minor",
+              "marks": 69,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B+",
+              "gradePoint": 7,
+              "creditPoint": 28
+            },
+            {
+              "paperCode": "MDE-101",
+              "subjectName": "Multidisciplinary Elective",
+              "category": "MDE",
+              "marks": 62,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B+",
+              "gradePoint": 7,
+              "creditPoint": 28
+            },
+            {
+              "paperCode": "AEC-101",
+              "subjectName": "Ability Enhancement Course I",
+              "category": "AEC",
+              "marks": 59,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B",
+              "gradePoint": 6,
+              "creditPoint": 24
+            },
+            {
+              "paperCode": "AEC-102",
+              "subjectName": "Ability Enhancement Course II",
+              "category": "AEC",
+              "marks": 53,
+              "fullMark": 100,
+              "credit": 4,
+              "grade": "B",
+              "gradePoint": 6,
+              "creditPoint": 24
+            },
+            {
+              "paperCode": "VAC-101",
+              "subjectName": "Value Added Course",
+              "category": "VAC",
+              "marks": 50,
+              "fullMark": 100,
+              "credit": 3,
+              "grade": "B",
+              "gradePoint": 6,
+              "creditPoint": 18
+            }
+          ],
+          "totalCredits": 27,
+          "totalCreditPoints": 190,
+          "sgpa": 7.04,
+          "percentage": 64.57,
+          "usedGrace": 0,
+          "remainingGrace": 8
+        }
+      ],
+      "publishedAt": "2026-10-29T06:14:16.609Z"
+    }
+  ],
+  "recheckingApplications": [],
+  "resultCorrections": []
+}

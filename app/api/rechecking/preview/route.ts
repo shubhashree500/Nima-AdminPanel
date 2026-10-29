@@ -23,6 +23,7 @@ function rollOf(result: any): string {
     student['Roll No.'],
     student.rollNo,
     student.roll,
+    student.r,
     student.Roll,
     student.rollNumber,
     student.roll_number,
@@ -314,7 +315,43 @@ function extractStudentPaperComponents(
     }
   }
 
-  // A calculated subject total is not a component mark.
+  // Check structured subject results if present on studentResult or sourceStudent
+  const subjectsArray = Array.isArray(studentResult?.subjects)
+    ? studentResult.subjects
+    : Array.isArray(sourceStudent?.subjects)
+      ? sourceStudent.subjects
+      : Array.isArray(sourceStudent?._originalSubjects)
+        ? sourceStudent._originalSubjects
+        : [];
+
+  const matchedSub = subjectsArray.find(
+    (item: any) =>
+      text(item?.paperCode ?? item?.code).toLowerCase() ===
+      paper.code.toLowerCase()
+  );
+
+  if (matchedSub && typeof matchedSub === 'object') {
+    const s: any = matchedSub;
+    midsem = toNum(s.midsem ?? s.midsemMark ?? s.MidsemMark) ?? midsem;
+    endsem = toNum(s.endsem ?? s.finalMark ?? s.FinalMark) ?? endsem;
+    practical = toNum(s.practical ?? s.practicalMark ?? s.PracticalMark) ?? practical;
+    attendance = toNum(s.attendance ?? s.Attandance) ?? attendance;
+    surpriseTest = toNum(s.surpriseTest ?? s.SurpriseTest) ?? surpriseTest;
+    assignment = toNum(s.assignment ?? s.Assignment) ?? assignment;
+
+    if (s.components && typeof s.components === 'object') {
+      const c = s.components;
+      midsem = toNum(c.midsem?.value ?? c.midsem) ?? midsem;
+      endsem = toNum(c.sem?.value ?? c.sem ?? c.endsem?.value ?? c.endsem) ?? endsem;
+      practical = toNum(c.practical?.value ?? c.practical) ?? practical;
+      attendance = toNum(c.attendance?.value ?? c.attendance) ?? attendance;
+    }
+
+    if (midsem === null && endsem === null && practical === null && s.marks !== undefined) {
+      endsem = toNum(s.marks);
+    }
+  }
+
   return {
     midsem,
     endsem,
@@ -507,24 +544,30 @@ function applyComponentToStudent(
     !Array.isArray(updated.courses) &&
     !Array.isArray(updated.Papers)
   ) {
-    const original = extractStudentPaperComponents(sourceStudent, paper, options);
+    const papersList = options?.papers?.length ? options.papers : [paper];
+    const newSubjects: Record<string, any> = {};
 
-    const components: Record<string, number | null> = {
-      midsem: original.midsem,
-      endsem: original.endsem,
-      practical: original.practical,
-      attendance: original.attendance,
-      surpriseTest: original.surpriseTest,
-      assignment: original.assignment,
-    };
+    for (const p of papersList) {
+      const orig = extractStudentPaperComponents(sourceStudent, p, options);
+      const isTarget = p.code.toLowerCase() === paper.code.toLowerCase();
+      const compNorm = isTarget ? norm : null;
 
-    components[norm] = newValue;
+      const components: Record<string, number | null> = {
+        midsem: compNorm === 'midsem' ? newValue : orig.midsem,
+        endsem:
+          compNorm === 'endsem' || compNorm === 'final' || compNorm === 'sem'
+            ? newValue
+            : orig.endsem,
+        practical: compNorm === 'practical' ? newValue : orig.practical,
+        attendance: compNorm === 'attendance' ? newValue : orig.attendance,
+        surpriseTest: compNorm === 'surpriseTest' ? newValue : orig.surpriseTest,
+        assignment: compNorm === 'assignment' ? newValue : orig.assignment,
+      };
 
-    updated.subjects = {
-      [paper.code]: {
-        code: paper.code,
-        paperCode: paper.code,
-        subject: paper.title,
+      newSubjects[p.code] = {
+        code: p.code,
+        paperCode: p.code,
+        subject: p.title,
         ...(components.midsem !== null
           ? { MidsemMark: components.midsem }
           : {}),
@@ -543,8 +586,36 @@ function applyComponentToStudent(
         ...(components.assignment !== null
           ? { Assignment: components.assignment }
           : {}),
-      },
-    };
+      };
+    }
+
+    updated.subjects = newSubjects;
+  } else if (
+    updated.subjects &&
+    typeof updated.subjects === 'object' &&
+    !Array.isArray(updated.subjects)
+  ) {
+    if (options?.papers?.length) {
+      for (const p of options.papers) {
+        const foundKey = Object.keys(updated.subjects).find(
+          (key) => key.toLowerCase() === p.code.toLowerCase()
+        );
+        if (!foundKey || !updated.subjects[foundKey]) {
+          const orig = extractStudentPaperComponents(sourceStudent, p, options);
+          updated.subjects[p.code] = {
+            code: p.code,
+            paperCode: p.code,
+            subject: p.title,
+            ...(orig.midsem !== null ? { MidsemMark: orig.midsem } : {}),
+            ...(orig.endsem !== null ? { FinalMark: orig.endsem } : {}),
+            ...(orig.practical !== null ? { PracticalMark: orig.practical } : {}),
+            ...(orig.attendance !== null ? { Attandance: orig.attendance } : {}),
+            ...(orig.surpriseTest !== null ? { SurpriseTest: orig.surpriseTest } : {}),
+            ...(orig.assignment !== null ? { Assignment: orig.assignment } : {}),
+          };
+        }
+      }
+    }
   }
 
   return updated;
@@ -968,7 +1039,12 @@ export async function POST(request: Request) {
     }
 
     const originalResult = studentMatches[0];
-    const sourceStudent = originalResult?.student ?? originalResult;
+    const sourceStudent = originalResult?.student
+      ? {
+          ...originalResult.student,
+          _originalSubjects: originalResult.subjects,
+        }
+      : originalResult;
 
     const program = String(original.program).toUpperCase() as
       | 'UG'
@@ -1045,6 +1121,14 @@ export async function POST(request: Request) {
       oldValue = extracted.assignment;
     }
 
+    // Never guess a missing original component mark.
+    if (oldValue === null || !Number.isFinite(oldValue)) {
+      return errorResponse(
+        'Cannot create a correction: the original component mark is missing. Load the original component marks before rechecking.',
+        422
+      );
+    }
+
     const validation = validateRecheckingMarkChange({
       oldValue,
       newValue,
@@ -1097,9 +1181,40 @@ export async function POST(request: Request) {
       ? recalculatedResults[0]
       : null;
 
-    if (!recalculated || !Array.isArray(recalculated.subjects)) {
+      if (!recalculated || !Array.isArray(recalculated.subjects)) {
       return errorResponse(
         'Recalculation failed. No correction was applied.',
+        422
+      );
+    }
+
+    // Require every paper from the original published result to remain
+    // present in the recalculated result.
+    const originalSubjects = Array.isArray(originalResult.subjects)
+      ? originalResult.subjects
+      : [];
+
+    const revisedSubjects = recalculated.subjects;
+
+    const originalPaperCodes = originalSubjects
+      .map((subject: any) => paperCodeOf(subject))
+      .filter(Boolean);
+
+    const revisedPaperCodes = revisedSubjects
+      .map((subject: any) => paperCodeOf(subject))
+      .filter(Boolean);
+
+    const missingPaperCodes = originalPaperCodes.filter(
+      (code: string) => !revisedPaperCodes.includes(code)
+    );
+
+    if (
+      originalPaperCodes.length === 0 ||
+      revisedPaperCodes.length !== originalPaperCodes.length ||
+      missingPaperCodes.length > 0
+    ) {
+      return errorResponse(
+        'Recalculation was rejected because the revised result does not contain the same complete set of papers. No correction was saved.',
         422
       );
     }

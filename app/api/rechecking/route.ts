@@ -1,4 +1,4 @@
-
+﻿
 import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
 
@@ -30,6 +30,7 @@ function rollOf(result: any): string {
       student['Roll No.'] ??
       student.rollNo ??
       student.roll ??
+      student.r ??
       student['College Roll No'] ??
       student['College Roll No.'] ??
       student.collegeRollNo ??

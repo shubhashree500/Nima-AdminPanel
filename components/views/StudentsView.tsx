@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import React, { useMemo, useState, ChangeEvent } from 'react';
 import { DBData, Student, PROG, ProgramKey } from '@/types';
@@ -7,6 +7,7 @@ import { parseCSV, readSpreadsheetFile } from '@/lib/csv';
 interface StudentsViewProps {
   db: DBData;
   onAddStudent: (student: Student) => Promise<boolean>;
+  onUpdateStudent?: (originalRoll: string, student: Student) => Promise<boolean>;
   onDeleteStudent: (roll: string) => Promise<void>;
   onImportStudents: (students: Student[]) => Promise<void>;
 }
@@ -129,10 +130,12 @@ function toStudent(fields: StudentFields): Student {
 export function StudentsView({
   db,
   onAddStudent,
+  onUpdateStudent,
   onDeleteStudent,
   onImportStudents,
 }: StudentsViewProps) {
   const [form, setForm] = useState<StudentFields>({ ...emptyStudent });
+  const [editingRoll, setEditingRoll] = useState<string | null>(null);
   const [addMsg, setAddMsg] = useState<{
     text: string;
     type: 'ok' | 'bad';
@@ -156,6 +159,92 @@ export function StudentsView({
   const updateField = (field: keyof StudentFields, value: string) => {
     setForm((previous) => ({ ...previous, [field]: value }));
     setAddMsg(null);
+  };
+
+  const handleStartEdit = (record: Partial<Student> & Record<string, any>) => {
+    const roll = studentRoll(record);
+    setEditingRoll(roll);
+    setForm({
+      batch: getStudentValue(record, 'batch') || '2025',
+      programme: getStudentValue(record, 'programme') || 'UG',
+      autonomousRollNo: getStudentValue(record, 'autonomousRollNo'),
+      collegeRollNo: getStudentValue(record, 'collegeRollNo'),
+      name: getStudentValue(record, 'name'),
+      dob: getStudentValue(record, 'dob'),
+      abcId: getStudentValue(record, 'abcId'),
+      department: getStudentValue(record, 'department'),
+      course: getStudentValue(record, 'course'),
+      stream: getStudentValue(record, 'stream'),
+    });
+    setAddMsg(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRoll(null);
+    setForm({ ...emptyStudent });
+    setAddMsg(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRoll) return;
+
+    const autoRoll = form.autonomousRollNo.trim();
+    const collegeRoll = form.collegeRollNo.trim();
+    const name = form.name.trim();
+    const programme = form.programme.trim().toUpperCase() as ProgramKey;
+
+    if (!name || !programme || (!autoRoll && !collegeRoll)) {
+      setAddMsg({
+        text: 'Enter the student name, programme, and at least one roll number.',
+        type: 'bad',
+      });
+      return;
+    }
+
+    if (!PROG[programme]) {
+      setAddMsg({
+        text: 'Programme must be one of the configured programs.',
+        type: 'bad',
+      });
+      return;
+    }
+
+    const student = toStudent({ ...form, programme });
+
+    try {
+      let success = false;
+      if (onUpdateStudent) {
+        success = await onUpdateStudent(editingRoll, student);
+      } else {
+        const res = await fetch('/api/students', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ originalRoll: editingRoll, ...student }),
+        });
+        const json = await res.json();
+        success = res.ok && json.success;
+      }
+
+      if (success) {
+        setEditingRoll(null);
+        setForm({ ...emptyStudent });
+        setAddMsg({
+          text: `Updated student ${name} successfully.`,
+          type: 'ok',
+        });
+      } else {
+        setAddMsg({
+          text: 'Failed to update student. Please check details.',
+          type: 'bad',
+        });
+      }
+    } catch {
+      setAddMsg({
+        text: 'An error occurred while updating the student.',
+        type: 'bad',
+      });
+    }
   };
 
   const handleAdd = async () => {
@@ -448,11 +537,17 @@ export function StudentsView({
     <>
       <h1>Students</h1>
       <p className="sub">
-        Add complete student records or import a student list from Excel/CSV.
+        Add individual student records, update existing records, or import a student list from Excel/CSV.
       </p>
 
+      {/* Add / Edit Student Form */}
       <div className="card">
-        <h2>Add a student</h2>
+        <h2>{editingRoll ? `Edit student (Roll: ${editingRoll})` : 'Add a student'}</h2>
+        {editingRoll && (
+          <p className="hint" style={{ color: 'var(--primary)' }}>
+            Updating existing student record. Modify the fields below and click Save Changes.
+          </p>
+        )}
 
         <div className="row">
           {(Object.keys(fieldLabels) as (keyof StudentFields)[]).map(
@@ -505,9 +600,20 @@ export function StudentsView({
             ),
           )}
 
-          <button className="btn primary" onClick={handleAdd}>
-            Add student
-          </button>
+          {editingRoll ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 10 }}>
+              <button className="btn primary" onClick={handleSaveEdit}>
+                Save changes
+              </button>
+              <button className="btn" onClick={handleCancelEdit}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button className="btn primary" onClick={handleAdd}>
+              Add student
+            </button>
+          )}
         </div>
 
         {addMsg && (
@@ -642,7 +748,7 @@ export function StudentsView({
                       <th>Department</th>
                       <th>Course</th>
                       <th>Stream</th>
-                      <th>Action</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
 
@@ -668,12 +774,20 @@ export function StudentsView({
                           <td>{getStudentValue(record, 'course') || '—'}</td>
                           <td>{getStudentValue(record, 'stream') || '—'}</td>
                           <td className="num">
-                            <button
-                              className="btn danger"
-                              onClick={() => onDeleteStudent(roll)}
-                            >
-                              Remove
-                            </button>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button
+                                className="btn"
+                                onClick={() => handleStartEdit(record)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn danger"
+                                onClick={() => onDeleteStudent(roll)}
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

@@ -93,6 +93,9 @@ export function RecheckingView() {
   const [calculations, setCalculations] = useState<Calculation[]>([]);
   const [selectedCalcId, setSelectedCalcId] = useState('');
   const [applications, setApplications] = useState<Application[]>([]);
+  const [corrections, setCorrections] = useState<any[]>([]);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'applied' | 'preview'>('all');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -108,6 +111,18 @@ export function RecheckingView() {
   const [newMark, setNewMark] = useState<string>('');
   const [updateReason, setUpdateReason] = useState('');
   const [linkedAppId, setLinkedAppId] = useState<string>('');
+
+  const linkedApplication = applications.find(
+    (app) => app.id === linkedAppId
+  );
+
+  const linkedApplicationStatus = linkedApplication?.status ?? '';
+
+  const canPreviewCorrection =
+    !linkedAppId || linkedApplicationStatus === 'Approved';
+
+  const canApplyCorrection =
+    linkedApplicationStatus === 'Approved';
 
   // Preview & Processing state
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -129,78 +144,84 @@ export function RecheckingView() {
 
   // Load calculations and applications
 
-const loadInitialData = useCallback(async () => {
-  setLoading(true);
+  const loadInitialData = useCallback(async () => {
+    setLoading(true);
 
-  try {
-    const [verRes, recRes] = await Promise.all([
-      fetch('/api/verify', { cache: 'no-store' }),
-      fetch('/api/rechecking', { cache: 'no-store' }),
-    ]);
+    try {
+      const [verRes, recRes, corrRes] = await Promise.all([
+        fetch('/api/verify', { cache: 'no-store' }),
+        fetch('/api/rechecking', { cache: 'no-store' }),
+        fetch('/api/result-corrections?includeAll=true', { cache: 'no-store' }),
+      ]);
 
-    const verJson = await verRes.json();
-    const recJson = await recRes.json();
+      const verJson = await verRes.json();
+      const recJson = await recRes.json();
+      const corrJson = await corrRes.json();
 
-    if (!verRes.ok || !verJson.success) {
-      throw new Error(
-        verJson.error || 'Could not load published examinations.'
-      );
-    }
-
-    // Accept supported response shapes and normalize status.
-    const allCalculations = Array.isArray(verJson.data)
-      ? verJson.data
-      : Array.isArray(verJson.calculations)
-        ? verJson.calculations
-        : [];
-
-    const publishedCalcs = allCalculations.filter(
-      (calculation: any) =>
-        String(calculation.status || '').trim().toLowerCase() ===
-        'published'
-    );
-
-    setCalculations(publishedCalcs);
-
-    // Keep the current selection if it still exists.
-    // Otherwise, select the first published calculation.
-    setSelectedCalcId((currentId) => {
-      if (
-        currentId &&
-        publishedCalcs.some((c: any) => c.id === currentId)
-      ) {
-        return currentId;
+      if (!verRes.ok || !verJson.success) {
+        throw new Error(
+          verJson.error || 'Could not load published examinations.'
+        );
       }
 
-      return publishedCalcs[0]?.id || '';
-    });
+      // Accept supported response shapes and normalize status.
+      const allCalculations = Array.isArray(verJson.data)
+        ? verJson.data
+        : Array.isArray(verJson.calculations)
+          ? verJson.calculations
+          : [];
 
-    if (recJson.success) {
-      setApplications(recJson.applications || []);
-    }
+      const publishedCalcs = allCalculations.filter(
+        (calculation: any) =>
+          String(calculation.status || '').trim().toLowerCase() ===
+          'published'
+      );
 
-    if (publishedCalcs.length === 0) {
+      setCalculations(publishedCalcs);
+
+      // Keep the current selection if it still exists.
+      // Otherwise, select the first published calculation.
+      setSelectedCalcId((currentId) => {
+        if (
+          currentId &&
+          publishedCalcs.some((c: any) => c.id === currentId)
+        ) {
+          return currentId;
+        }
+
+        return publishedCalcs[0]?.id || '';
+      });
+
+      if (recJson.success) {
+        setApplications(recJson.applications || []);
+      }
+
+      if (corrJson.success) {
+        setCorrections(Array.isArray(corrJson.data) ? corrJson.data : []);
+      }
+
+      if (publishedCalcs.length === 0) {
+        setMessage({
+          text: 'No published examinations found. Verify that a result has been published in Result Processing.',
+          ok: false,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load rechecking data:', error);
+
+      setCalculations([]);
+      setSelectedCalcId('');
       setMessage({
-        text: 'No published examinations found. Verify that a result has been published in Result Processing.',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'Failed to load examinations.',
         ok: false,
       });
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Failed to load rechecking data:', error);
-
-    setCalculations([]);
-    setSelectedCalcId('');
-    setMessage({
-      text:
-        error instanceof Error
-          ? error.message
-          : 'Failed to load examinations.',
-      ok: false,
-    });
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     void loadInitialData();
@@ -283,77 +304,85 @@ const loadInitialData = useCallback(async () => {
 
   // Handle Apply Mark Update
 
-const handleApplyMarkUpdate = async () => {
-  if (
-    !selectedCalcId ||
-    !studentRoll.trim() ||
-    !selectedPaperCode ||
-    newMark === '' ||
-    !updateReason.trim()
-  ) {
-    setMessage({
-      text: 'Missing required parameters to apply mark update.',
-      ok: false,
-    });
-    return;
-  }
-
-  if (!linkedAppId) {
-    setMessage({
-      text: 'Select an approved rechecking application before applying a mark correction.',
-      ok: false,
-    });
-    return;
-  }
-
-  const confirm = window.confirm(
-    `Apply mark correction for ${studentRoll} in paper ${selectedPaperCode} (${selectedComponent}: ${currentComponentVal ?? '—'} → ${newMark})?\n\nThe original published result will remain unchanged. The revised result will be stored separately for updated reports.`
-  );
-
-  if (!confirm) return;
-
-  setProcessing(true);
-  setMessage(null);
-
-  try {
-    const res = await fetch('/api/rechecking/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        originalCalculationId: selectedCalcId,
-        studentRoll: studentRoll.trim(),
-        paperCode: selectedPaperCode,
-        component: selectedComponent,
-        newValue: Number(newMark),
-        reason: updateReason.trim(),
-        applicationId: linkedAppId,
-        apply: true,
-      }),
-    });
-
-    const json = await res.json();
-
-    if (!res.ok || !json.success) {
-      throw new Error(json.error || 'Mark correction failed.');
+  const handleApplyMarkUpdate = async () => {
+    if (
+      !selectedCalcId ||
+      !studentRoll.trim() ||
+      !selectedPaperCode ||
+      newMark === '' ||
+      !updateReason.trim()
+    ) {
+      setMessage({
+        text: 'Missing required parameters to apply mark update.',
+        ok: false,
+      });
+      return;
     }
 
-    setPreview(json);
-    setMessage({
-      text: 'Mark correction applied successfully. The original published result remains unchanged.',
-      ok: true,
-    });
+    if (linkedApplicationStatus !== 'Approved') {
+  setMessage({
+    text: `Cannot apply correction. Application status is "${linkedApplicationStatus || 'Unknown'}". Only Approved applications can be updated.`,
+    ok: false,
+  });
+  return;
+}
 
-    await loadStudentData(selectedCalcId, studentRoll);
-    await loadInitialData();
-  } catch (err: any) {
-    setMessage({
-      text: err.message || 'Mark correction failed.',
-      ok: false,
-    });
-  } finally {
-    setProcessing(false);
-  }
-};
+    if (!linkedAppId) {
+      setMessage({
+        text: 'Select an approved rechecking application before applying a mark correction.',
+        ok: false,
+      });
+      return;
+    }
+
+    const confirm = window.confirm(
+      `Apply mark correction for ${studentRoll} in paper ${selectedPaperCode} (${selectedComponent}: ${currentComponentVal ?? '—'} → ${newMark})?\n\nThe original published result will remain unchanged. The revised result will be stored separately for updated reports.`
+    );
+
+    if (!confirm) return;
+
+    setProcessing(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch('/api/rechecking/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalCalculationId: selectedCalcId,
+          studentRoll: studentRoll.trim(),
+          paperCode: selectedPaperCode,
+          component: selectedComponent,
+          newValue: Number(newMark),
+          reason: updateReason.trim(),
+          applicationId: linkedAppId,
+          apply: true,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Mark correction failed.');
+      }
+
+      setPreview(json);
+      setMessage({
+        text: 'Mark correction applied successfully. The original published result remains unchanged.',
+        ok: true,
+      });
+
+      await loadStudentData(selectedCalcId, studentRoll);
+      await loadInitialData();
+    } catch (err: any) {
+      setMessage({
+        text: err.message || 'Mark correction failed.',
+        ok: false,
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
 
 
   // Register New Application
@@ -461,23 +490,30 @@ const handleApplyMarkUpdate = async () => {
             <div className="flex gap-2">
               <button
                 onClick={() => setActiveTab('recheck')}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  activeTab === 'recheck'
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeTab === 'recheck'
                     ? 'bg-blue-700 text-white shadow'
                     : 'bg-white border text-gray-700 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 Subject-Wise Mark Update
               </button>
               <button
                 onClick={() => setActiveTab('applications')}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  activeTab === 'applications'
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeTab === 'applications'
                     ? 'bg-blue-700 text-white shadow'
                     : 'bg-white border text-gray-700 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 Applications ({applications.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeTab === 'history'
+                    ? 'bg-blue-700 text-white shadow'
+                    : 'bg-white border text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                Correction History ({corrections.length})
               </button>
             </div>
           </div>
@@ -485,11 +521,10 @@ const handleApplyMarkUpdate = async () => {
 
         {message && (
           <div
-            className={`rounded-xl border p-4 text-sm font-medium ${
-              message.ok
+            className={`rounded-xl border p-4 text-sm font-medium ${message.ok
                 ? 'border-green-200 bg-green-50 text-green-800'
                 : 'border-red-200 bg-red-50 text-red-800'
-            }`}
+              }`}
           >
             {message.text}
           </div>
@@ -546,15 +581,68 @@ const handleApplyMarkUpdate = async () => {
                   </div>
                 </label>
 
+                <label className="text-sm font-medium text-gray-700">
+                  Link Rechecking Application
+                  <select
+                    className="mt-1 w-full rounded-lg border p-2.5 text-sm"
+                    value={linkedAppId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setLinkedAppId(id);
+                      const app = applications.find((a) => a.id === id);
+                      if (app) {
+                        if (app.paperCode) setSelectedPaperCode(app.paperCode);
+                        if (app.requestedMarks !== null && app.requestedMarks !== undefined) {
+                          setNewMark(String(app.requestedMarks));
+                        }
+                        setUpdateReason(`Rechecking application ${app.id}: ${app.reason}`);
+                      }
+                    }}
+                  >
+                    <option value="">-- Select Approved Application --</option>
+                    {applications
+                      .filter((a) => !studentRoll.trim() || a.studentRoll.toLowerCase() === studentRoll.trim().toLowerCase())
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.id} · {a.paperCode || 'Paper'} · {a.status} (Req: {a.requestedMarks ?? '—'})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
                 {linkedAppId && (
                   <div className="flex flex-col justify-end">
-                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900">
-                      Linked to Application: <strong>{linkedAppId}</strong>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                      <div>
+                        Linked to Application: <strong>{linkedAppId}</strong>
+                      </div>
+
+                      <div className="mt-1 font-semibold">
+                        Status: {linkedApplicationStatus || 'Application not found'}
+                      </div>
+
+                      {linkedApplicationStatus === 'Completed' && (
+                        <div className="mt-1 font-semibold text-green-800">
+                          Mark correction has already been completed. Further changes are disabled.
+                        </div>
+                      )}
+
+                      {linkedApplicationStatus !== 'Approved' &&
+                        linkedApplicationStatus !== 'Completed' && (
+                          <div className="mt-1">
+                            The application must be approved before you can preview or apply a correction.
+                          </div>
+                        )}
+
                       <button
-                        onClick={() => setLinkedAppId('')}
-                        className="ml-2 font-bold text-red-600 hover:underline"
+                        type="button"
+                        onClick={() => {
+                          setLinkedAppId('');
+                          setPreview(null);
+                        }}
+                        className="mt-2 font-bold text-red-600 hover:underline"
                       >
-                        [Unlink]
+                        Unlink Application
                       </button>
                     </div>
                   </div>
@@ -588,11 +676,10 @@ const handleApplyMarkUpdate = async () => {
                       <div>
                         <div className="text-xs text-gray-500">Status</div>
                         <span
-                          className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${
-                            studentDetails.status === 'PASS'
+                          className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${studentDetails.status === 'PASS'
                               ? 'bg-green-100 text-green-800'
                               : 'bg-red-100 text-red-800'
-                          }`}
+                            }`}
                         >
                           {studentDetails.status}
                         </span>
@@ -684,11 +771,10 @@ const handleApplyMarkUpdate = async () => {
                             </td>
                             <td className="border p-2.5 text-center">
                               <span
-                                className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${
-                                  ['F', 'AB', 'M'].includes(paper.grade)
+                                className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${['F', 'AB', 'M'].includes(paper.grade)
                                     ? 'bg-red-100 text-red-800'
                                     : 'bg-green-100 text-green-800'
-                                }`}
+                                  }`}
                               >
                                 {paper.grade} ({paper.gradePoint})
                               </span>
@@ -701,11 +787,10 @@ const handleApplyMarkUpdate = async () => {
                                   setNewMark('');
                                   setPreview(null);
                                 }}
-                                className={`rounded px-3 py-1 text-xs font-semibold ${
-                                  isSelected
+                                className={`rounded px-3 py-1 text-xs font-semibold ${isSelected
                                     ? 'bg-blue-700 text-white'
                                     : 'border bg-white text-gray-700 hover:bg-gray-100'
-                                }`}
+                                  }`}
                               >
                                 {isSelected ? 'Selected' : 'Select'}
                               </button>
@@ -725,16 +810,21 @@ const handleApplyMarkUpdate = async () => {
                 <h2 className="text-base font-semibold text-gray-900">
                   3. Select Paper Component & Enter Revised Mark
                 </h2>
+
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="text-sm font-medium text-gray-700">Target Paper</label>
-                    <div className="mt-1 font-semibold text-gray-900 p-2.5 rounded-lg border bg-gray-50">
+                    <label className="text-sm font-medium text-gray-700">
+                      Target Paper
+                    </label>
+                    <div className="mt-1 rounded-lg border bg-gray-50 p-2.5 font-semibold text-gray-900">
                       {currentPaper.code} — {currentPaper.title}
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-gray-700">Mark Component</label>
+                    <label className="text-sm font-medium text-gray-700">
+                      Mark Component
+                    </label>
                     <select
                       className="mt-1 w-full rounded-lg border p-2.5 text-sm font-medium"
                       value={selectedComponent}
@@ -744,10 +834,18 @@ const handleApplyMarkUpdate = async () => {
                         setPreview(null);
                       }}
                     >
-                      <option value="sem">Semester / Endsem Mark (Max: {currentPaper.components.sem.max})</option>
-                      <option value="midsem">Midsem Mark (Max: {currentPaper.components.midsem.max})</option>
-                      <option value="practical">Practical Mark (Max: {currentPaper.components.practical.max})</option>
-                      <option value="attendance">Attendance Mark (Max: {currentPaper.components.attendance.max})</option>
+                      <option value="sem">
+                        Semester / Endsem Mark (Max: {currentPaper.components.sem.max})
+                      </option>
+                      <option value="midsem">
+                        Midsem Mark (Max: {currentPaper.components.midsem.max})
+                      </option>
+                      <option value="practical">
+                        Practical Mark (Max: {currentPaper.components.practical.max})
+                      </option>
+                      <option value="attendance">
+                        Attendance Mark (Max: {currentPaper.components.attendance.max})
+                      </option>
                     </select>
                   </div>
 
@@ -755,8 +853,9 @@ const handleApplyMarkUpdate = async () => {
                     <label className="text-sm font-medium text-gray-700">
                       Current Value vs Max
                     </label>
-                    <div className="mt-1 p-2.5 rounded-lg border bg-gray-50 text-sm">
-                      Current: <strong>{currentComponentVal ?? 'None'}</strong> | Max: <strong>{currentComponentMax}</strong>
+                    <div className="mt-1 rounded-lg border bg-gray-50 p-2.5 text-sm">
+                      Current: <strong>{currentComponentVal ?? 'None'}</strong> | Max:{' '}
+                      <strong>{currentComponentMax}</strong>
                     </div>
                   </div>
 
@@ -782,7 +881,7 @@ const handleApplyMarkUpdate = async () => {
                     <textarea
                       rows={2}
                       className="mt-1 w-full rounded-lg border p-2.5 text-sm"
-                      placeholder="e.g. Scrutiny re-addition of Question 3 marks (+4) approved by Controller of Examinations"
+                      placeholder="Enter the approved reason for the mark update"
                       value={updateReason}
                       onChange={(e) => setUpdateReason(e.target.value)}
                     />
@@ -791,17 +890,29 @@ const handleApplyMarkUpdate = async () => {
 
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <button
+                    type="button"
                     onClick={handlePreviewRecalculation}
-                    disabled={processing || newMark === '' || !updateReason.trim()}
-                    className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                    disabled={
+                      processing ||
+                      newMark === '' ||
+                      !updateReason.trim() ||
+                      !canPreviewCorrection
+                    }
+                    className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {processing ? 'Processing…' : 'Preview Recalculation'}
                   </button>
 
                   <button
+                    type="button"
                     onClick={handleApplyMarkUpdate}
-                    disabled={processing || newMark === '' || !updateReason.trim()}
-                    className="rounded-lg bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+                    disabled={
+                      processing ||
+                      newMark === '' ||
+                      !updateReason.trim() ||
+                      !canApplyCorrection
+                    }
+                    className="rounded-lg bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {processing ? 'Saving…' : 'Apply Mark Update & Revise Result'}
                   </button>
@@ -817,11 +928,10 @@ const handleApplyMarkUpdate = async () => {
                     4. Recalculation Comparison: Original vs Revised
                   </h2>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
-                      preview.correction.status === 'applied'
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${preview.correction.status === 'applied'
                         ? 'bg-green-200 text-green-900'
                         : 'bg-amber-200 text-amber-900'
-                    }`}
+                      }`}
                   >
                     {preview.correction.status === 'applied' ? 'Applied & Saved' : 'Preview Only'}
                   </span>
@@ -1075,6 +1185,199 @@ const handleApplyMarkUpdate = async () => {
                       <tr>
                         <td colSpan={8} className="border p-5 text-center text-gray-500">
                           No applications registered yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: CORRECTION HISTORY */}
+        {activeTab === 'history' && (
+          <div className="space-y-6">
+            <div className="rounded-xl border bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">
+                    Approved Mark Corrections History
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Comprehensive audit trail of mark modifications. Original published results remain untouched while revised versions are preserved.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Search by roll, name, paper…"
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="rounded-lg border p-2 text-xs"
+                  />
+                  <select
+                    value={historyStatusFilter}
+                    onChange={(e) => setHistoryStatusFilter(e.target.value as any)}
+                    className="rounded-lg border p-2 text-xs font-semibold"
+                  >
+                    <option value="all">All Records ({corrections.length})</option>
+                    <option value="applied">
+                      Applied ({corrections.filter((c) => c.status === 'applied').length})
+                    </option>
+                    <option value="preview">
+                      Preview Only ({corrections.filter((c) => c.status === 'preview').length})
+                    </option>
+                  </select>
+                  <button
+                    onClick={() => void loadInitialData()}
+                    disabled={loading}
+                    className="rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg bg-gray-50 p-3 text-center">
+                  <div className="text-xs text-gray-500">Total Recorded</div>
+                  <div className="text-lg font-bold text-gray-800">{corrections.length}</div>
+                </div>
+                <div className="rounded-lg bg-green-50 p-3 text-center">
+                  <div className="text-xs text-green-700">Applied Corrections</div>
+                  <div className="text-lg font-bold text-green-800">
+                    {corrections.filter((c) => c.status === 'applied').length}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-amber-50 p-3 text-center">
+                  <div className="text-xs text-amber-700">Preview Checks</div>
+                  <div className="text-lg font-bold text-amber-800">
+                    {corrections.filter((c) => c.status === 'preview').length}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-blue-50 p-3 text-center">
+                  <div className="text-xs text-blue-700">Published Original</div>
+                  <div className="text-lg font-bold text-blue-800">Preserved</div>
+                </div>
+              </div>
+
+              {/* History Table */}
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-100 text-gray-700">
+                      <th className="border p-2.5">Correction ID</th>
+                      <th className="border p-2.5">Applied / Created</th>
+                      <th className="border p-2.5">Student</th>
+                      <th className="border p-2.5">Exam Scope</th>
+                      <th className="border p-2.5">Paper & Component</th>
+                      <th className="border p-2.5 text-center">Mark Modification</th>
+                      <th className="border p-2.5 text-center">Status</th>
+                      <th className="border p-2.5">Reason & Audit Trail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {corrections
+                      .filter((c) => {
+                        if (historyStatusFilter !== 'all' && c.status !== historyStatusFilter) return false;
+                        if (!historySearch.trim()) return true;
+                        const q = historySearch.trim().toLowerCase();
+                        return (
+                          String(c.studentRoll || '').toLowerCase().includes(q) ||
+                          String(c.studentName || '').toLowerCase().includes(q) ||
+                          String(c.paperCode || '').toLowerCase().includes(q) ||
+                          String(c.id || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((c) => {
+                        const diff =
+                          c.newValue !== null && c.oldValue !== null && c.newValue !== undefined && c.oldValue !== undefined
+                            ? Number(c.newValue) - Number(c.oldValue)
+                            : null;
+
+                        return (
+                          <tr key={c.id} className="hover:bg-gray-50">
+                            <td className="border p-2.5 font-bold text-blue-900">
+                              {c.id}
+                              {c.applicationId && (
+                                <div className="text-[10px] text-gray-400 font-normal">
+                                  App: {c.applicationId}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border p-2.5 text-gray-600">
+                              {c.appliedAt
+                                ? new Date(c.appliedAt).toLocaleString()
+                                : c.createdAt
+                                  ? new Date(c.createdAt).toLocaleString()
+                                  : '—'}
+                            </td>
+                            <td className="border p-2.5">
+                              <div className="font-semibold text-gray-900">{c.studentName || '—'}</div>
+                              <div className="font-mono text-gray-500">{c.studentRoll}</div>
+                            </td>
+                            <td className="border p-2.5">
+                              {c.program} Sem {c.semester} (Batch {c.batch || '-'})
+                              <div className="text-gray-400">{c.department || c.course || 'All'}</div>
+                            </td>
+                            <td className="border p-2.5">
+                              <div className="font-semibold text-gray-800">{c.paperCode}</div>
+                              <div className="text-gray-500">{c.paperTitle || ''}</div>
+                              <span className="inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gray-700">
+                                {c.component}
+                              </span>
+                            </td>
+                            <td className="border p-2.5 text-center">
+                              <div className="font-bold">
+                                <span className="text-gray-500">{c.oldValue ?? '—'}</span>
+                                <span className="mx-1 text-gray-400">→</span>
+                                <span className="text-blue-700">{c.newValue}</span>
+                              </div>
+                              {diff !== null && (
+                                <div
+                                  className={`text-[10px] font-bold ${
+                                    diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-gray-500'
+                                  }`}
+                                >
+                                  {diff > 0 ? `+${diff}` : diff}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border p-2.5 text-center">
+                              {c.status === 'applied' ? (
+                                <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-800">
+                                  Applied
+                                </span>
+                              ) : (
+                                <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
+                                  Preview Only
+                                </span>
+                              )}
+                            </td>
+                            <td className="border p-2.5">
+                              <div className="font-medium text-gray-800">{c.reason || '—'}</div>
+                              {Array.isArray(c.history) && c.history.length > 0 && (
+                                <div className="mt-1 space-y-0.5 border-t pt-1 text-[10px] text-gray-500">
+                                  {c.history.map((h: any, i: number) => (
+                                    <div key={i}>
+                                      • {h.action}{' '}
+                                      <span className="text-gray-400">
+                                        ({h.at ? new Date(h.at).toLocaleTimeString() : ''})
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {corrections.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="border p-5 text-center text-gray-500">
+                          No correction history records found.
                         </td>
                       </tr>
                     )}

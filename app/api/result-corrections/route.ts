@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { getDB } from '@/lib/db';
 
@@ -6,6 +5,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const calculationId = searchParams.get('calculationId');
+    const includeAll =
+      searchParams.get('all') === 'true' ||
+      searchParams.get('includeAll') === 'true';
 
     const db: any = getDB();
 
@@ -14,16 +16,17 @@ export async function GET(request: Request) {
       : [];
 
     // Reports should use applied corrections only.
-    const appliedCorrections = corrections.filter(
+    // When includeAll is specified, return all corrections for history.
+    const filteredCorrections = corrections.filter(
       (correction: any) =>
-        correction.status === 'applied' &&
+        (includeAll || correction.status === 'applied') &&
         (!calculationId ||
           correction.originalCalculationId === calculationId)
     );
 
     return NextResponse.json({
       success: true,
-      data: appliedCorrections,
+      data: filteredCorrections,
     });
   } catch (error) {
     return NextResponse.json(

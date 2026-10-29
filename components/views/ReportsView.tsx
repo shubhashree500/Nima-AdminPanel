@@ -9,6 +9,28 @@ type ReportKind = 'grade-sheets' | 'tabular-register' | 'statistics';
 type Calculation = { id: string; program: string; semester: number; batch?: string | number; course?: string; department?: string; count?: number; status?: string; createdAt?: string; results?: any[]; hasRevisions?: boolean; departments?: any[] };
 
 function identity(result: any) { return result?.student || result || {}; }
+function rollsOf(result: any): string[] {
+  const s = identity(result);
+  return [
+    s['College Roll No'],
+    s['College Roll No.'],
+    s['Roll No'],
+    s['Roll No.'],
+    s['College Roll'],
+    s.collegeRollNo,
+    s.roll,
+    s.rollNo,
+    s.r,
+    s.Roll,
+    s['Autonomous Roll No'],
+    s['Autonomous Roll No.'],
+    s.autonomousRollNo,
+    result?.studentRoll,
+    result?.roll,
+  ]
+    .map((item) => String(item ?? '').trim().toLowerCase())
+    .filter(Boolean);
+}
 function rollOf(result: any) { const s = identity(result); return s['College Roll No'] || s['College Roll No.'] || s['Roll No'] || s['College Roll'] || s.collegeRollNo || s.roll || s.rollNo || s['Autonomous Roll No'] || s.autonomousRollNo || '-'; }
 function nameOf(result: any) { const s = identity(result); return s['Applicant Name'] || s['Name of the Students'] || s['Student Name'] || s.name || s.studentName || rollOf(result); }
 function deptOf(result: any) { const s = identity(result); return s.Department || s.department || s.course || '-'; }
@@ -113,21 +135,27 @@ const reportResults = useMemo(() => {
     );
 
   for (const correction of matchingCorrections) {
-    const roll = String(correction.studentRoll || '')
-      .trim()
-      .toLowerCase();
+    const candidateRolls = [
+      String(correction.studentRoll || '').trim().toLowerCase(),
+      ...rollsOf(correction.revisedStudentResult),
+      ...rollsOf(correction.originalStudentResult),
+    ].filter(Boolean);
 
-    if (roll) {
+    for (const roll of candidateRolls) {
       latestByRoll.set(roll, correction);
     }
   }
 
   return originalResults.map((originalResult) => {
-    const roll = String(rollOf(originalResult))
-      .trim()
-      .toLowerCase();
+    const candidateRolls = rollsOf(originalResult);
+    let correction: any = null;
 
-    const correction = latestByRoll.get(roll);
+    for (const roll of candidateRolls) {
+      if (latestByRoll.has(roll)) {
+        correction = latestByRoll.get(roll);
+        break;
+      }
+    }
 
     if (!correction) return originalResult;
 

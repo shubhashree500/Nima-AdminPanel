@@ -1,0 +1,167 @@
+{
+  "college": "Nimapara Autonomous College",
+  "max": 100,
+  "pass": 33,
+  "subjects": {
+    "UG|1": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education",
+      "Biotechnology"
+    ],
+    "UG|2": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|3": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|4": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|5": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "UG|6": [
+      "Physics",
+      "Chemistry",
+      "Mathematics",
+      "Odia",
+      "History",
+      "Education"
+    ],
+    "PG|1": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|2": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|3": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ],
+    "PG|4": [
+      "Paper 1",
+      "Paper 2",
+      "Paper 3",
+      "Paper 4",
+      "Project"
+    ]
+  },
+  "students": [
+    {
+      "batch": "2025",
+      "programme": "PG",
+      "autonomousRollNo": "153NAC25001",
+      "collegeRollNo": "CHEM25-001",
+      "name": "ABINASH KUMAR SAHOO",
+      "dob": "12-02-2004",
+      "abcId": "99999",
+      "department": "Chemistry",
+      "course": "Chemistry",
+      "stream": "PHYSICAL SCIENCES",
+      "r": "153NAC25001",
+      "n": "ABINASH KUMAR SAHOO",
+      "p": "PG"
+    },
+    {
+      "batch": "2025",
+      "programme": "UG",
+      "autonomousRollNo": "111NAC25002",
+      "collegeRollNo": "ODIA25-002",
+      "name": "PRIYANKA MISHRA",
+      "dob": "15-08-2005",
+      "abcId": "88888",
+      "department": "Odia",
+      "course": "Odia",
+      "stream": "ARTS",
+      "r": "111NAC25002",
+      "n": "PRIYANKA MISHRA",
+      "p": "UG"
+    }
+  ],
+  "marks": {
+    "153NAC25001|1": {
+      "Paper 1": 85
+    },
+    "111NAC25002|1": {
+      "Biotechnology": 78,
+      "Chemistry": 65
+    }
+  },
+  "examSessions": [
+    {
+      "id": "EXAM-1793254466835",
+      "academicYear": "2025-26",
+      "batch": 2025,
+      "program": "PG",
+      "department": "Chemistry",
+      "semester": 1,
+      "examType": "Regular",
+      "status": "Draft",
+      "createdAt": "2026-10-29T06:14:26.835Z",
+      "updatedAt": "2026-10-29T06:14:26.839Z"
+    }
+  ],
+  "recheckingApplications": [],
+  "resultCorrections": [],
+  "calculatedResults": [
+    {
+      "id": "CALC-PUBLISHED-TEST",
+      "program": "UG",
+      "semester": 1,
+      "batch": "2025",
+      "status": "published",
+      "createdAt": "2026-10-29T06:14:26.881Z",
+      "results": [
+        {
+          "student": {
+            "autonomousRollNo": "111NAC25002",
+            "collegeRollNo": "ODIA25-002",
+            "r": "111NAC25002",
+            "name": "PRIYANKA MISHRA"
+          },
+          "subjects": [
+            {
+              "paperCode": "BIO",
+              "marks": 78
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
