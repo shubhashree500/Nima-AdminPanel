@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       p: programme as ProgramKey,
     };
 
-    db.students.push(student);
+    db.students.unshift(student);
     saveDB(db);
 
     return NextResponse.json({
@@ -275,6 +275,7 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const roll = searchParams.get('roll');
+    const force = searchParams.get('force') === 'true';
 
     if (!roll) {
       return NextResponse.json(
@@ -284,6 +285,7 @@ export async function DELETE(request: Request) {
     }
 
     const db = getDB();
+    const rollLower = roll.trim().toLowerCase();
 
     // Protect published results from unauthorized changes
     const publishedList = (db as any).calculatedResults || [];
@@ -298,44 +300,55 @@ export async function DELETE(request: Request) {
         const college = String(
           s.collegeRollNo ?? s['College Roll No'] ?? ''
         ).toLowerCase();
-        const rNorm = roll.toLowerCase();
-        return auto === rNorm || college === rNorm;
+        return auto === rollLower || college === rollLower;
       });
     });
 
-    if (hasPublished) {
+    if (hasPublished && !force) {
       return NextResponse.json(
         {
           success: false,
           error:
-            'Cannot delete student who has official published examination results.',
+            'Cannot delete student who has official published examination results. Confirm force delete to proceed.',
+          canForce: true,
         },
         { status: 409 }
       );
     }
 
+    const beforeCount = db.students.length;
     db.students = db.students.filter((student) => {
       const record = student as Student & Record<string, any>;
 
       const autonomousRollNo = String(
         record.autonomousRollNo ?? record.r ?? '',
-      ).trim();
+      ).trim().toLowerCase();
 
-      const collegeRollNo = String(record.collegeRollNo ?? '').trim();
+      const collegeRollNo = String(record.collegeRollNo ?? '').trim().toLowerCase();
+      const r = String(record.r ?? '').trim().toLowerCase();
 
-      return autonomousRollNo !== roll && collegeRollNo !== roll;
+      return (
+        autonomousRollNo !== rollLower &&
+        collegeRollNo !== rollLower &&
+        r !== rollLower
+      );
     });
 
-    // Delete associated marks using the supplied roll number.
+    // Delete associated marks using the supplied roll number (case-insensitive).
     Object.keys(db.marks).forEach((key) => {
-      if (key.split('|')[0] === roll) {
+      const markRoll = key.split('|')[0].trim().toLowerCase();
+      if (markRoll === rollLower) {
         delete db.marks[key];
       }
     });
 
     saveDB(db);
 
-    return NextResponse.json({ success: true, data: db });
+    return NextResponse.json({
+      success: true,
+      deleted: beforeCount - db.students.length,
+      data: db,
+    });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : 'An unexpected error occurred.';

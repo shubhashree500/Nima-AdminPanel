@@ -1,4 +1,3 @@
-
 type UGCourse =
   | 'BA'
   | 'BSC'
@@ -52,7 +51,15 @@ export function isPracticalSubject(
 
 export function detectUGCourse(
   rollNo: unknown,
+  explicitCourse?: string,
+  explicitBatch?: string | number,
 ): UGDetectedInfo | null {
+  const c = String(explicitCourse ?? '').trim().toUpperCase();
+  const b = Number(explicitBatch) || 2024;
+  if (c === 'BCA' || c === 'BBA' || c === 'BA' || c === 'BSC' || c === 'BCOM') {
+    return { course: c as UGCourse, batch: b };
+  }
+
   const roll = String(rollNo ?? '')
     .trim()
     .toUpperCase();
@@ -62,24 +69,24 @@ export function detectUGCourse(
   }
 
   // Check longer prefixes first.
-  if (roll.startsWith('BCA24')) {
-    return { course: 'BCA', batch: 2024 };
+  if (roll.startsWith('BCA')) {
+    return { course: 'BCA', batch: roll.includes('25') ? 2025 : 2024 };
   }
 
-  if (roll.startsWith('BBA24')) {
-    return { course: 'BBA', batch: 2024 };
+  if (roll.startsWith('BBA')) {
+    return { course: 'BBA', batch: roll.includes('25') ? 2025 : 2024 };
   }
 
-  if (roll.startsWith('BA24')) {
-    return { course: 'BA', batch: 2024 };
+  if (roll.startsWith('BA')) {
+    return { course: 'BA', batch: roll.includes('25') ? 2025 : 2024 };
   }
 
-  if (roll.startsWith('BS24')) {
-    return { course: 'BSC', batch: 2024 };
+  if (roll.startsWith('BS') || roll.startsWith('BSC')) {
+    return { course: 'BSC', batch: roll.includes('25') ? 2025 : 2024 };
   }
 
-  if (roll.startsWith('BC24')) {
-    return { course: 'BCOM', batch: 2024 };
+  if (roll.startsWith('BC') || roll.startsWith('BCOM')) {
+    return { course: 'BCOM', batch: roll.includes('25') ? 2025 : 2024 };
   }
 
   return null;
@@ -203,7 +210,7 @@ export function mapUGExcelStudent(
     'rollNo',
   ]);
 
-  const detected = detectUGCourse(rollNo);
+  const detected = detectUGCourse(rollNo, row?.course, row?.batch);
 
   if (!detected) {
     throw new Error(
@@ -242,25 +249,25 @@ export function mapUGExcelStudent(
 
     subjects: {
       'Major-CP-5': createSubject(
-  row,
-  'Major-CP-5',
-  String(department || 'Major-CP-5'),
-  0,
-),
+        row,
+        'Major-CP-5',
+        String(department || 'Major-CP-5'),
+        0,
+      ),
 
-'Major-CP-6': createSubject(
-  row,
-  'Major-CP-6',
-  String(department || 'Major-CP-6'),
-  1,
-),
+      'Major-CP-6': createSubject(
+        row,
+        'Major-CP-6',
+        String(department || 'Major-CP-6'),
+        1,
+      ),
 
-'Major-CP-7': createSubject(
-  row,
-  'Major-CP-7',
-  String(department || 'Major-CP-7'),
-  2,
-),
+      'Major-CP-7': createSubject(
+        row,
+        'Major-CP-7',
+        String(department || 'Major-CP-7'),
+        2,
+      ),
 
       'MINOR-3': createSubject(
         row,

@@ -266,6 +266,32 @@ export function StudentResultsView() {
     setMessage('');
   }
 
+  const handleDeleteStudentResult = async (roll: string, name: string) => {
+    if (!selectedId) return;
+
+    const confirm = window.confirm(
+      `Are you sure you want to delete the result for ${name} (${roll}) from this calculation?`
+    );
+    if (!confirm) return;
+
+    try {
+      const res = await fetch(
+        `/api/verify?calculationId=${encodeURIComponent(selectedId)}&roll=${encodeURIComponent(roll)}`,
+        { method: 'DELETE' }
+      );
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to delete student result.');
+      }
+
+      setMessage(`Result for student ${name} (${roll}) was deleted.`);
+      clearStudentSelection();
+      await load();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete student result.');
+    }
+  };
+
   return (
     <section className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -441,14 +467,24 @@ export function StudentResultsView() {
                             </td>
                             <td className="border p-2">{statusOf(record)}</td>
                             <td className="border p-2">
-                              <button
-                                type="button"
-                                onClick={() => selectStudent(index)}
-                                aria-expanded={isOpen}
-                                className="cursor-pointer whitespace-nowrap rounded border bg-white px-3 py-1.5 font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              >
-                                {isOpen ? 'Hide result' : 'View result'}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => selectStudent(index)}
+                                  aria-expanded={isOpen}
+                                  className="cursor-pointer whitespace-nowrap rounded border bg-white px-3 py-1.5 font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  {isOpen ? 'Hide result' : 'View result'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteStudentResult(rollOf(record), nameOf(record))}
+                                  className="cursor-pointer whitespace-nowrap rounded border border-red-300 bg-red-50 px-2.5 py-1.5 font-medium text-red-700 hover:bg-red-100 hover:text-red-800"
+                                  title="Delete student result from this calculation"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
                             </td>
                           </tr>
 
@@ -472,13 +508,22 @@ export function StudentResultsView() {
                                       </p>
                                     </div>
 
-                                    <button
-                                      type="button"
-                                      onClick={clearStudentSelection}
-                                      className="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50"
-                                    >
-                                      Close Details
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteStudentResult(rollOf(record), nameOf(record))}
+                                        className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 font-semibold text-red-700 hover:bg-red-100"
+                                      >
+                                        🗑️ Delete Result
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={clearStudentSelection}
+                                        className="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50"
+                                      >
+                                        Close Details
+                                      </button>
+                                    </div>
                                   </div>
 
                                   {/* Paper-wise marks */}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DBData, Student, ProgramKey } from '@/types';
 import { Sidebar, PageKey } from './Sidebar';
+import { LandingPage, AuthUser } from './LandingPage';
 import { OverviewView } from './views/OverviewView';
 import { StudentsView } from './views/StudentsView';
 import { MarksView } from './views/MarksView';
@@ -23,6 +24,29 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
   const [db, setDb] = useState<DBData>(initialData);
   const [page, setPage] = useState<PageKey>('dash');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+
+  // Check stored auth session - starting from localhost:3000 starts on landing page
+  useEffect(() => {
+    try {
+      // Clear persistent storage so visiting localhost:3000 always starts from landing page
+      localStorage.removeItem('result_erp_auth');
+      const stored = sessionStorage.getItem('result_erp_auth');
+      if (stored) {
+        setCurrentUser(JSON.parse(stored));
+      }
+    } catch {}
+    setIsAuthChecked(true);
+  }, []);
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('result_erp_auth');
+      sessionStorage.removeItem('result_erp_auth');
+    } catch {}
+    setCurrentUser(null);
+  };
 
   // Sync to localStorage as client-side backup
   useEffect(() => {
@@ -132,11 +156,15 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
   const handleDeleteStudent = async (
     roll: string
   ): Promise<void> => {
+    if (!window.confirm(`Are you sure you want to delete student with roll "${roll}"? This action cannot be undone.`)) {
+      return;
+    }
+
     setIsSyncing(true);
 
     try {
       const res = await fetch(
-        `/api/students?roll=${encodeURIComponent(roll)}`,
+        `/api/students?roll=${encodeURIComponent(roll)}&force=true`,
         { method: 'DELETE' }
       );
 
@@ -149,6 +177,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
       }
     } catch (error) {
       console.error('Error deleting student:', error);
+      alert('Failed to delete student.');
     } finally {
       setIsSyncing(false);
     }
@@ -375,17 +404,22 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     setIsSyncing(true);
 
     try {
-      const res = await fetch('/api/reset', {
+      const res = await fetch('/api/reset?force=true', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
       });
 
       const json = await res.json();
 
       if (json.success && json.data) {
         setDb(json.data);
+      } else if (json.error) {
+        alert(json.error);
       }
     } catch (error) {
       console.error('Error resetting to demo data:', error);
+      alert('Failed to reset demo data. Please try again.');
     } finally {
       setIsSyncing(false);
     }
@@ -396,21 +430,58 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     setIsSyncing(true);
 
     try {
-      const res = await fetch('/api/clear', {
+      const res = await fetch('/api/clear?force=true', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
       });
 
       const json = await res.json();
 
       if (json.success && json.data) {
         setDb(json.data);
+      } else if (json.error) {
+        alert(json.error);
       }
     } catch (error) {
       console.error('Error clearing data:', error);
+      alert('Failed to clear data. Please try again.');
     } finally {
       setIsSyncing(false);
     }
   };
+
+  // Delete calculation
+  const handleDeleteCalculation = async (calcId: string): Promise<boolean> => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch(`/api/process?id=${encodeURIComponent(calcId)}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setDb(json.data);
+        return true;
+      } else if (json.error) {
+        alert(json.error);
+      }
+    } catch (error) {
+      console.error('Error deleting calculation:', error);
+      alert('Failed to delete calculation.');
+    } finally {
+      setIsSyncing(false);
+    }
+    return false;
+  };
+
+  if (!currentUser) {
+    return (
+      <LandingPage
+        collegeName={db.college}
+        onLogin={(user) => setCurrentUser(user)}
+      />
+    );
+  }
 
   return (
     <div className="app">
@@ -419,10 +490,17 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         currentPage={page}
         onPageChange={handlePageChange}
         isSyncing={isSyncing}
+        user={currentUser}
+        onLogout={handleLogout}
       />
 
       <main id="view">
-        {page === 'dash' && <OverviewView db={db} />}
+        {page === 'dash' && (
+          <OverviewView
+            db={db}
+            onDeleteCalculation={handleDeleteCalculation}
+          />
+        )}
 
         {page === 'students' && (
           <StudentsView
@@ -442,7 +520,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           />
         )}
 
-        {page === 'process' && <ResultProcessingView />}
+        {page === 'process' && <ResultProcessingView db={db} />}
 
         {page === 'verify' && <VerifyView />}
 
@@ -462,7 +540,12 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           />
         )}
 
-        {page === 'overview' && <OverviewView db={db} />}
+        {page === 'overview' && (
+          <OverviewView
+            db={db}
+            onDeleteCalculation={handleDeleteCalculation}
+          />
+        )}
 
         {page === 'exam-sessions' && (
           <ExamSessionsView

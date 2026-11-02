@@ -42,10 +42,8 @@ function normalizeDepartment(value?: string): string {
   const aliases: Record<string, string> = {
     odia: 'odia',
     chemistry: 'chemistry',
-
     math: 'mathematics',
     mathematics: 'mathematics',
-
     commerce: 'commerce',
     geology: 'geology',
     mfc: 'mfc',
@@ -58,47 +56,53 @@ function normalizeDepartment(value?: string): string {
 export function getResultConfig(
   request: ResolveRequest,
 ): CourseConfig | undefined {
-  return configs.find((config) => {
-    if (config.program !== request.program) {
-      return false;
-    }
-
-    if (config.semester !== request.semester) {
-      return false;
-    }
+  // First attempt: exact match including batch constraints
+  const exact = configs.find((config) => {
+    if (config.program !== request.program) return false;
+    if (config.semester !== request.semester) return false;
 
     if (
       config.course &&
       request.course &&
-      config.course.toLowerCase() !==
-        request.course.toLowerCase()
+      config.course.toLowerCase() !== request.course.toLowerCase()
     ) {
       return false;
     }
 
     if (config.department) {
-      const configDepartment =
-        normalizeDepartment(config.department);
-
-      const requestDepartment =
-        normalizeDepartment(request.department);
-
-      if (configDepartment !== requestDepartment) {
-        return false;
-      }
+      const configDepartment = normalizeDepartment(config.department);
+      const requestDepartment = normalizeDepartment(request.department);
+      if (configDepartment !== requestDepartment) return false;
     }
 
     const version = config.academicVersion;
+    if (version) {
+      if (request.batch < version.fromBatch) return false;
+      if (version.toBatch !== undefined && request.batch > version.toBatch) return false;
+    }
 
-    if (request.batch < version.fromBatch) {
+    return true;
+  });
+
+  if (exact) return exact;
+
+  // Fallback: match program, semester, and department/course regardless of batch ceiling
+  return configs.find((config) => {
+    if (config.program !== request.program) return false;
+    if (config.semester !== request.semester) return false;
+
+    if (
+      config.course &&
+      request.course &&
+      config.course.toLowerCase() !== request.course.toLowerCase()
+    ) {
       return false;
     }
 
-    if (
-      version.toBatch !== undefined &&
-      request.batch > version.toBatch
-    ) {
-      return false;
+    if (config.department) {
+      const configDepartment = normalizeDepartment(config.department);
+      const requestDepartment = normalizeDepartment(request.department);
+      if (configDepartment !== requestDepartment) return false;
     }
 
     return true;

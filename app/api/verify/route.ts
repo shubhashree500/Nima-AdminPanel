@@ -140,6 +140,29 @@ export async function PUT(request: Request) {
     record.statusHistory = Array.isArray(record.statusHistory) ? record.statusHistory : [];
     record.statusHistory.push({ from: previousStatus, to: status, at: record.updatedAt });
 
+    if (status === 'published') {
+      if (!db.marks) db.marks = {};
+      if (Array.isArray(record.results)) {
+        record.results.forEach((item: any) => {
+          const s = item.student || item;
+          const roll = String(
+            s.autonomousRollNo || s['Autonomous Roll No'] || s.collegeRollNo || s['College Roll No'] || s.roll || s.r || ''
+          ).trim();
+          if (!roll) return;
+          const key = `${roll}|${record.semester}`;
+          if (!db.marks[key]) db.marks[key] = {};
+          if (Array.isArray(item.subjects)) {
+            item.subjects.forEach((sub: any) => {
+              const subName = sub.subjectName || sub.paperCode || sub.code || sub.name;
+              if (subName && sub.marks !== undefined) {
+                db.marks[key][subName] = Number(sub.marks) || 0;
+              }
+            });
+          }
+        });
+      }
+    }
+
     if (status === 'published' && Array.isArray(db.examSessions)) {
       db.examSessions = db.examSessions.map((session: any) => {
         const matches = session.program === record.program &&
@@ -167,6 +190,94 @@ export async function PUT(request: Request) {
           error instanceof Error
             ? error.message
             : 'Failed to update result status',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const calculationId = searchParams.get('calculationId');
+    const roll = searchParams.get('roll');
+
+    if (!calculationId || !roll) {
+      return NextResponse.json(
+        { success: false, error: 'calculationId and roll are required.' },
+        { status: 400 }
+      );
+    }
+
+    const db: any = getDB();
+    const records = db.calculatedResults || [];
+    const record = records.find((item: any) => item.id === calculationId);
+
+    if (!record) {
+      return NextResponse.json(
+        { success: false, error: 'Calculation record not found.' },
+        { status: 404 }
+      );
+    }
+
+    const rollLower = roll.trim().toLowerCase();
+    const originalLength = record.results?.length || 0;
+
+    record.results = (record.results || []).filter((item: any) => {
+      const s = item.student || item;
+      const sRolls = [
+        s['College Roll No'],
+        s['College Roll No.'],
+        s['Roll No'],
+        s['Roll No.'],
+        s['College Roll'],
+        s.collegeRollNo,
+        s.roll,
+        s.rollNo,
+        s.r,
+        s['Autonomous Roll No'],
+        s['Autonomous Roll No.'],
+        s.autonomousRollNo,
+        item?.studentRoll,
+        item?.roll,
+      ]
+        .map((r) => String(r ?? '').trim().toLowerCase())
+        .filter(Boolean);
+
+      return !sRolls.includes(rollLower);
+    });
+
+    record.count = record.results.length;
+    record.passed = record.results.filter((res: any) =>
+      (res.subjects || []).every(
+        (sub: any) =>
+          !['F', 'AB', 'M'].includes(String(sub.grade || '').toUpperCase())
+      )
+    ).length;
+    record.failed = record.count - record.passed;
+    record.updatedAt = new Date().toISOString();
+
+    // If published, also remove from db.marks
+    if (record.status === 'published' && db.marks) {
+      const key = `${roll}|${record.semester}`;
+      delete db.marks[key];
+    }
+
+    saveDB(db);
+
+    return NextResponse.json({
+      success: true,
+      deletedCount: originalLength - record.count,
+      data: record,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to delete student result',
       },
       { status: 500 }
     );

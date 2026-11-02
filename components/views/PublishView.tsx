@@ -160,6 +160,7 @@ export function PublishView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showPublishSuccessPopup, setShowPublishSuccessPopup] = useState(false);
 
   const [message, setMessage] = useState<{
     text: string;
@@ -342,6 +343,7 @@ export function PublishView() {
       });
 
       await load();
+      setShowPublishSuccessPopup(true);
     } catch (error) {
       setMessage({
         text:
@@ -911,6 +913,86 @@ export function PublishView() {
           </>
         )}
       </div>
+
+      {showPublishSuccessPopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            padding: '32px 28px',
+            maxWidth: '440px',
+            width: '100%',
+            textAlign: 'center',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #e2e8f0',
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              backgroundColor: '#ecfdf5',
+              border: '2px solid #a7f3d0',
+              color: '#059669',
+              fontSize: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              fontWeight: 800,
+            }}>
+              ✓
+            </div>
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: 800,
+              margin: '0 0 8px 0',
+              color: '#0f172a',
+              letterSpacing: '-0.3px',
+            }}>
+              Result Published Successfully!
+            </h3>
+            <p style={{
+              fontSize: '14px',
+              color: '#64748b',
+              margin: '0 0 24px 0',
+              lineHeight: 1.5,
+            }}>
+              The examination results have been verified and officially published. They are now locked and available for grade sheet generation and tabulation registers.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPublishSuccessPopup(false)}
+              style={{
+                width: '100%',
+                padding: '12px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#1e3a8a',
+                color: '#ffffff',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 6px -1px rgba(30, 58, 138, 0.2)',
+              }}
+            >
+              OK, Got it
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

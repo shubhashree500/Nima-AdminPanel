@@ -914,42 +914,60 @@ export async function POST(request: Request) {
 
     const originalCalculationId = text(body.originalCalculationId);
     const studentRoll = text(body.studentRoll);
-    const paperCode = text(body.paperCode);
-    const componentName = text(body.component);
-    const reason = text(body.reason);
     const applicationId = text(body.applicationId);
     const shouldApply = body.apply === true;
+    const defaultReason = text(body.reason || 'Rechecking mark update');
 
-    if (
-      !originalCalculationId ||
-      !studentRoll ||
-      !paperCode ||
-      !componentName ||
-      !reason ||
-      body.newValue === '' ||
-      body.newValue === null ||
-      body.newValue === undefined
+    if (!originalCalculationId || !studentRoll) {
+      return errorResponse('Calculation ID and student roll are required.', 400);
+    }
+
+    // Support both multiple changes (body.changes) or single change (body.paperCode, component, newValue)
+    let rawChanges: any[] = [];
+    if (Array.isArray(body.changes) && body.changes.length > 0) {
+      rawChanges = body.changes;
+    } else if (
+      body.paperCode &&
+      body.newValue !== '' &&
+      body.newValue !== null &&
+      body.newValue !== undefined
     ) {
+      rawChanges = [
+        {
+          paperCode: body.paperCode,
+          component: body.component || 'sem',
+          newValue: body.newValue,
+          reason: body.reason || defaultReason,
+        },
+      ];
+    } else {
       return errorResponse(
-        'Calculation ID, student roll, paper code, component, new value, and reason are required.',
+        'Paper code, component, and new mark are required.',
         400
       );
     }
 
-    if (shouldApply && !applicationId) {
-      return errorResponse(
-        'An approved rechecking application is required before applying a mark correction.',
-        400
-      );
-    }
-
-    const newValue = Number(body.newValue);
-
-    if (!Number.isFinite(newValue)) {
-      return errorResponse('New mark must be a valid number.', 400);
+    for (const c of rawChanges) {
+      if (!c.paperCode || c.newValue === '' || c.newValue === null || c.newValue === undefined) {
+        return errorResponse('Each paper change must have a paperCode and newValue.', 400);
+      }
+      if (!Number.isFinite(Number(c.newValue))) {
+        return errorResponse('New mark must be a valid number.', 400);
+      }
     }
 
     const db: any = getDB();
+
+    // If an applicationId was explicitly provided, verify it exists
+    if (shouldApply && applicationId) {
+      const applications = Array.isArray(db.recheckingApplications)
+        ? db.recheckingApplications
+        : [];
+      const app = applications.find((a: any) => a.id === applicationId);
+      if (!app) {
+        return errorResponse('Application not found.', 404);
+      }
+    }
 
     const records = Array.isArray(db.calculatedResults)
       ? db.calculatedResults
@@ -975,47 +993,6 @@ export async function POST(request: Request) {
         'Student results are unavailable in the original calculation.',
         400
       );
-    }
-
-    // Applying a correction requires a matching Approved application.
-    let linkedApplication: any = null;
-
-    if (shouldApply) {
-      const applications = Array.isArray(db.recheckingApplications)
-        ? db.recheckingApplications
-        : [];
-
-      linkedApplication = applications.find(
-        (app: any) => app.id === applicationId
-      );
-
-      if (!linkedApplication) {
-        return errorResponse(
-          'Linked rechecking application was not found.',
-          404
-        );
-      }
-
-      if (linkedApplication.status !== 'Approved') {
-        return errorResponse(
-          'Only an Approved rechecking application can be applied.',
-          400
-        );
-      }
-
-      if (
-        text(linkedApplication.originalCalculationId) !==
-          originalCalculationId ||
-        text(linkedApplication.studentRoll).toLowerCase() !==
-          studentRoll.toLowerCase() ||
-        text(linkedApplication.paperCode).toLowerCase() !==
-          paperCode.toLowerCase()
-      ) {
-        return errorResponse(
-          'The application does not match this calculation, student, and paper.',
-          400
-        );
-      }
     }
 
     const requestedRoll = studentRoll.trim().toLowerCase();
@@ -1079,94 +1056,127 @@ export async function POST(request: Request) {
       );
     }
 
-    const paper = config.papers?.find(
-      (item) =>
-        item.code.toLowerCase() === paperCode.toLowerCase()
-    );
+    // Validate all changes
+    const validatedChanges: Array<{
+      paper: PaperConfig;
+      component: string;
+      oldValue: number;
+      newValue: number;
+      reason: string;
+      originalPaperResult: any;
+    }> = [];
 
-    if (!paper) {
-      return errorResponse(
-        'Paper is not configured for this student.',
-        404
+    for (const c of rawChanges) {
+      const pCode = text(c.paperCode);
+      const compName = text(c.component || 'sem');
+      const nVal = Number(c.newValue);
+      const chReason = text(c.reason || defaultReason);
+
+      const paper = (config.papers || []).find(
+        (item) => item.code.toLowerCase() === pCode.toLowerCase()
+      ) || (originalResult.subjects || []).find(
+        (s: any) => text(s.paperCode || s.code).toLowerCase() === pCode.toLowerCase()
       );
-    }
 
-    const maxMark = getComponentMaxMark(paper, componentName);
+      if (!paper) {
+        return errorResponse(`Paper ${pCode} is not configured for this student.`, 404);
+      }
 
-    const extracted = extractStudentPaperComponents(
-      originalResult,
-      paper,
-      { papers: config.papers, department }
-    );
+      const paperConfigObj: PaperConfig = paper.marks
+        ? paper
+        : ({
+            code: pCode,
+            title: paper.subjectName || paper.title || pCode,
+            type: 'theory',
+            credit: paper.credit ?? 4,
+            marks: {
+              fullMark: paper.fullMark ?? 100,
+              endsem: { max: paper.fullMark ?? 100 },
+              midsem: { max: 20 },
+            },
+          } as PaperConfig);
 
-    const norm = normalizeComponentName(componentName);
-
-    let oldValue: number | null = null;
-
-    if (norm === 'midsem') {
-      oldValue = extracted.midsem;
-    } else if (
-      norm === 'endsem' ||
-      norm === 'final' ||
-      norm === 'sem'
-    ) {
-      oldValue = extracted.endsem;
-    } else if (norm === 'practical') {
-      oldValue = extracted.practical;
-    } else if (norm === 'attendance') {
-      oldValue = extracted.attendance;
-    } else if (norm === 'surpriseTest') {
-      oldValue = extracted.surpriseTest;
-    } else if (norm === 'assignment') {
-      oldValue = extracted.assignment;
-    }
-
-    // Never guess a missing original component mark.
-    if (oldValue === null || !Number.isFinite(oldValue)) {
-      return errorResponse(
-        'Cannot create a correction: the original component mark is missing. Load the original component marks before rechecking.',
-        422
+      const maxMark = getComponentMaxMark(paperConfigObj, compName);
+      const extracted = extractStudentPaperComponents(
+        originalResult,
+        paperConfigObj,
+        { papers: config.papers, department }
       );
-    }
 
-    const validation = validateRecheckingMarkChange({
-      oldValue,
-      newValue,
-      maxMark,
-      config,
-    });
+      const norm = normalizeComponentName(compName);
+      let oldValue: number | null = null;
+      if (norm === 'midsem') oldValue = extracted.midsem;
+      else if (norm === 'endsem' || norm === 'final' || norm === 'sem') oldValue = extracted.endsem;
+      else if (norm === 'practical') oldValue = extracted.practical;
+      else if (norm === 'attendance') oldValue = extracted.attendance;
+      else if (norm === 'surpriseTest') oldValue = extracted.surpriseTest;
+      else if (norm === 'assignment') oldValue = extracted.assignment;
 
-    if (!validation.valid) {
-      return errorResponse(
-        validation.error || 'Invalid mark change.',
-        400
+      if (oldValue === null || !Number.isFinite(oldValue)) {
+        const sub = (originalResult.subjects || []).find(
+          (s: any) => text(s.paperCode || s.code).toLowerCase() === pCode.toLowerCase()
+        );
+        if (sub && Number.isFinite(Number(sub.marks))) {
+          oldValue = Number(sub.marks);
+        } else {
+          return errorResponse(
+            `Cannot create a correction for ${pCode}: the original component mark is missing.`,
+            422
+          );
+        }
+      }
+
+      const validation = validateRecheckingMarkChange({
+        oldValue,
+        newValue: nVal,
+        maxMark,
+        config,
+      });
+
+      if (!validation.valid) {
+        return errorResponse(validation.error || `Invalid mark change for ${pCode}.`, 400);
+      }
+
+      const originalPaperResult = (originalResult.subjects || []).find(
+        (s: any) => paperCodeOf(s) === paperConfigObj.code.toLowerCase()
       );
+
+      validatedChanges.push({
+        paper: paperConfigObj,
+        component: compName,
+        oldValue,
+        newValue: nVal,
+        reason: chReason,
+        originalPaperResult,
+      });
     }
 
-    // Replay previously applied corrections first, then this change.
-    // The published original calculation is never mutated.
+    // Replay previously applied corrections first
     const previousCorrections = orderedAppliedCorrections(
       db,
       original.id,
       originalResult
     );
 
-    const studentWithPrevious = applyStoredCorrections(
+    let updatedStudent = applyStoredCorrections(
       sourceStudent,
       previousCorrections,
       config.papers || [],
       department
     );
 
-    const updatedStudent = applyComponentToStudent(
-      studentWithPrevious,
-      paper,
-      componentName,
-      newValue,
-      { papers: config.papers, department }
-    );
+    // Apply all staged changes sequentially
+    for (const vc of validatedChanges) {
+      updatedStudent = applyComponentToStudent(
+        updatedStudent,
+        vc.paper,
+        vc.component,
+        vc.newValue,
+        { papers: config.papers, department }
+      );
+    }
 
-    // Use the existing official calculation engine.
+    // Use official calculation engine
     const recalculatedResults = calculateResults({
       program,
       semester,
@@ -1181,15 +1191,13 @@ export async function POST(request: Request) {
       ? recalculatedResults[0]
       : null;
 
-      if (!recalculated || !Array.isArray(recalculated.subjects)) {
+    if (!recalculated || !Array.isArray(recalculated.subjects)) {
       return errorResponse(
         'Recalculation failed. No correction was applied.',
         422
       );
     }
 
-    // Require every paper from the original published result to remain
-    // present in the recalculated result.
     const originalSubjects = Array.isArray(originalResult.subjects)
       ? originalResult.subjects
       : [];
@@ -1219,119 +1227,192 @@ export async function POST(request: Request) {
       );
     }
 
-    const originalPaperResult = (
-      originalResult.subjects || []
-    ).find(
-      (subject: any) =>
-        paperCodeOf(subject) === paper.code.toLowerCase()
-    );
-
-    const revisedPaperResult = recalculated.subjects.find(
-      (subject: any) =>
-        paperCodeOf(subject) === paper.code.toLowerCase()
-    );
-
-    if (!revisedPaperResult) {
-      return errorResponse(
-        'The revised paper result could not be found. No correction was applied.',
-        422
-      );
-    }
-
     const now = new Date().toISOString();
-    const correctionId = `CORR-${Date.now()}`;
+    const createdCorrections: any[] = [];
 
-    const revisedStudentResult = shouldApply
-      ? {
-          ...structuredClone(recalculated),
-          isRevised: true,
-          revisedAt: now,
-          revisedPaper: paper.code,
-          correctionId,
-        }
-      : structuredClone(recalculated);
+    for (let i = 0; i < validatedChanges.length; i++) {
+      const vc = validatedChanges[i];
+      const revisedPaperResult = recalculated.subjects.find(
+        (subject: any) => paperCodeOf(subject) === vc.paper.code.toLowerCase()
+      );
 
-    const correction = {
-      id: correctionId,
-      status: shouldApply ? 'applied' : 'preview',
-      originalCalculationId: original.id,
-      applicationId: applicationId || null,
-
-      studentRoll: rollOf(originalResult),
-      studentName: nameOf(originalResult),
-
-      program,
-      semester,
-      batch,
-      course: course || null,
-      department: department || null,
-
-      paperCode: paper.code,
-      paperTitle: paper.title,
-      component: componentName,
-
-      oldValue,
-      newValue,
-      reason,
-
-      originalPaperResult: structuredClone(originalPaperResult ?? null),
-      revisedPaperResult: structuredClone(revisedPaperResult),
-
-      originalStudentResult: structuredClone(originalResult),
-      revisedStudentResult,
-
-      createdAt: now,
-      appliedAt: shouldApply ? now : null,
-
-      history: [
-        {
-          action: shouldApply
-            ? 'Approved mark correction applied; original result preserved'
-            : 'Correction preview generated',
-          at: now,
-        },
-      ],
-    };
-
-    if (!Array.isArray(db.resultCorrections)) {
-      db.resultCorrections = [];
-    }
-
-    db.resultCorrections.push(correction);
-
-    // Complete the linked application only after successful recalculation.
-    if (shouldApply && linkedApplication) {
-      linkedApplication.status = 'Completed';
-      linkedApplication.correctionId = correction.id;
-      linkedApplication.decisionNotes = [
-        text(linkedApplication.decisionNotes),
-        `Mark correction applied: ${oldValue ?? '—'} → ${newValue}. ${reason}`,
-      ]
-        .filter(Boolean)
-        .join(' | ');
-
-      linkedApplication.updatedAt = now;
-
-      if (!Array.isArray(linkedApplication.history)) {
-        linkedApplication.history = [];
+      if (!revisedPaperResult) {
+        return errorResponse(
+          `The revised paper result for ${vc.paper.code} could not be found. No correction was applied.`,
+          422
+        );
       }
 
-      linkedApplication.history.push({
-        action: `Correction ${correction.id} applied; mark changed from ${oldValue ?? '—'} to ${newValue}.`,
-        at: now,
-      });
+      const correctionId = `CORR-${Date.now()}-${i}`;
+
+      const revisedStudentResult = shouldApply
+        ? {
+            ...structuredClone(recalculated),
+            isRevised: true,
+            revisedAt: now,
+            revisedPaper: vc.paper.code,
+            correctionId,
+          }
+        : structuredClone(recalculated);
+
+      const correction = {
+        id: correctionId,
+        status: shouldApply ? 'applied' : 'preview',
+        originalCalculationId: original.id,
+        applicationId: applicationId || null,
+
+        studentRoll: rollOf(originalResult),
+        studentName: nameOf(originalResult),
+
+        program,
+        semester,
+        batch,
+        course: course || null,
+        department: department || null,
+
+        paperCode: vc.paper.code,
+        paperTitle: vc.paper.title,
+        component: vc.component,
+
+        oldValue: vc.oldValue,
+        newValue: vc.newValue,
+        reason: vc.reason,
+
+        originalPaperResult: structuredClone(vc.originalPaperResult ?? null),
+        revisedPaperResult: structuredClone(revisedPaperResult),
+
+        originalStudentResult: structuredClone(originalResult),
+        revisedStudentResult,
+
+        createdAt: now,
+        appliedAt: shouldApply ? now : null,
+
+        history: [
+          {
+            action: shouldApply
+              ? 'Approved mark correction applied; original result preserved'
+              : 'Correction preview generated',
+            at: now,
+          },
+        ],
+      };
+
+      createdCorrections.push(correction);
     }
 
-    // The original published calculation remains unchanged.
-    saveDB(db);
+    let linkedApplication: any = null;
+
+    if (shouldApply) {
+      if (!Array.isArray(db.resultCorrections)) {
+        db.resultCorrections = [];
+      }
+      db.resultCorrections.push(...createdCorrections);
+
+      if (!Array.isArray(db.recheckingApplications)) {
+        db.recheckingApplications = [];
+      }
+
+      if (applicationId) {
+        linkedApplication = db.recheckingApplications.find(
+          (app: any) => app.id === applicationId
+        );
+      }
+
+      if (!linkedApplication) {
+        linkedApplication = db.recheckingApplications.find(
+          (app: any) =>
+            text(app.studentRoll).toLowerCase() === requestedRoll &&
+            app.status !== 'Completed' &&
+            app.status !== 'Rejected'
+        );
+      }
+
+      const paperSummary = validatedChanges
+        .map((vc) => `${vc.paper.code} (${vc.component}: ${vc.oldValue} → ${vc.newValue})`)
+        .join(', ');
+
+      const papersUpdated = validatedChanges.map((vc, idx) => ({
+        paperCode: vc.paper.code,
+        paperTitle: vc.paper.title,
+        component: vc.component,
+        oldValue: vc.oldValue,
+        newValue: vc.newValue,
+        originalMarks: vc.originalPaperResult?.marks ?? 0,
+        revisedMarks: createdCorrections[idx]?.revisedPaperResult?.marks ?? 0,
+        originalGrade: vc.originalPaperResult?.grade ?? '—',
+        revisedGrade: createdCorrections[idx]?.revisedPaperResult?.grade ?? '—',
+        appliedAt: now,
+      }));
+
+      if (!linkedApplication) {
+        linkedApplication = {
+          id: `APP-${Date.now()}`,
+          studentRoll: rollOf(originalResult),
+          studentName: nameOf(originalResult),
+          program: String(original.program).toUpperCase(),
+          semester: Number(original.semester),
+          batch: String(original.batch ?? ''),
+          paperCode: validatedChanges.map((vc) => vc.paper.code).join(', '),
+          papersCount: validatedChanges.length,
+          papersUpdated,
+          reason: defaultReason,
+          requestedMarks: validatedChanges[0]?.newValue ?? null,
+          status: 'Completed',
+          originalCalculationId: original.id,
+          correctionId: createdCorrections[0]?.id || null,
+          decisionNotes: `Mark correction applied for ${validatedChanges.length} paper(s): ${paperSummary}. ${defaultReason}`,
+          originalStudentResult: structuredClone(originalResult),
+          revisedStudentResult: structuredClone(recalculated),
+          createdAt: now,
+          updatedAt: now,
+          history: [
+            {
+              action: `Application registered and mark corrections applied for ${validatedChanges.length} paper(s): ${paperSummary}.`,
+              at: now,
+            },
+          ],
+        };
+        db.recheckingApplications.unshift(linkedApplication);
+      } else {
+        linkedApplication.status = 'Completed';
+        linkedApplication.paperCode = validatedChanges.map((vc) => vc.paper.code).join(', ');
+        linkedApplication.papersCount = validatedChanges.length;
+        linkedApplication.papersUpdated = papersUpdated;
+        linkedApplication.correctionId = createdCorrections[0]?.id || linkedApplication.correctionId;
+        linkedApplication.originalStudentResult = structuredClone(originalResult);
+        linkedApplication.revisedStudentResult = structuredClone(recalculated);
+        linkedApplication.decisionNotes = [
+          text(linkedApplication.decisionNotes),
+          `Mark correction applied for ${validatedChanges.length} paper(s): ${paperSummary}. ${defaultReason}`,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+        linkedApplication.updatedAt = now;
+        if (!Array.isArray(linkedApplication.history)) {
+          linkedApplication.history = [];
+        }
+        linkedApplication.history.push({
+          action: `Correction applied for ${validatedChanges.length} paper(s): ${paperSummary}.`,
+          at: now,
+        });
+      }
+
+      for (const c of createdCorrections) {
+        c.applicationId = linkedApplication.id;
+      }
+
+      saveDB(db);
+    }
 
     return NextResponse.json(
       {
         success: true,
         message: shouldApply
-          ? 'Mark correction applied successfully. The original published result remains unchanged; the revised result is stored separately.'
+          ? `Mark correction applied successfully for ${validatedChanges.length} paper(s). The original published result remains unchanged; the revised result is stored separately.`
           : 'Correction preview generated successfully. No result was changed.',
-        correction,
+        correction: createdCorrections[0],
+        corrections: createdCorrections,
+        application: linkedApplication,
         applied: shouldApply,
       },
       { status: shouldApply ? 200 : 201 }

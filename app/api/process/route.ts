@@ -83,13 +83,18 @@ function isValidStudent(
     student?.collegeRollNo ??
     student?.roll ??
     student?.rollNo ??
-    student?.['Roll No'];
+    student?.['Roll No'] ??
+    student?.autonomousRollNo ??
+    student?.['Autonomous Roll No'] ??
+    student?.['Autonomous Roll No.'] ??
+    student?.r;
 
   const name =
     student?.['Applicant Name'] ??
     student?.['Name of the Students'] ??
     student?.['Student Name'] ??
-    student?.name;
+    student?.name ??
+    student?.n;
 
   return Boolean(
     department &&
@@ -133,6 +138,7 @@ function saveCalculation({
   course,
   department,
   departments,
+  calculationId,
 }: {
   engine: any;
   results: any[];
@@ -144,6 +150,7 @@ function saveCalculation({
   course?: string;
   department?: string;
   departments?: any[];
+  calculationId?: string;
 }) {
   const db: any = getDB();
 
@@ -153,6 +160,95 @@ function saveCalculation({
 
   const now =
     new Date().toISOString();
+
+  // Find existing calculation record for the same batch, program, semester
+  let existingRecord: any = null;
+  if (calculationId) {
+    existingRecord = db.calculatedResults.find(
+      (item: any) => item.id === calculationId
+    );
+  }
+
+  if (!existingRecord) {
+    // Prefer matching unpublished calculation for this program, semester, batch
+    existingRecord = db.calculatedResults.find(
+      (item: any) =>
+        item.program === program &&
+        Number(item.semester) === Number(semester) &&
+        String(item.batch || '') === String(batch || '') &&
+        item.status !== 'published'
+    );
+    // If none found with status !== 'published', match any for this program, semester, batch
+    if (!existingRecord) {
+      existingRecord = db.calculatedResults.find(
+        (item: any) =>
+          item.program === program &&
+          Number(item.semester) === Number(semester) &&
+          String(item.batch || '') === String(batch || '')
+      );
+    }
+  }
+
+  if (existingRecord) {
+    // Merge new student results under this existing batch!
+    const existingList: any[] = Array.isArray(existingRecord.results)
+      ? existingRecord.results
+      : [];
+
+    for (const newRes of results) {
+      const newS = newRes.student || newRes;
+      const newAuto = String(
+        newS.autonomousRollNo ?? newS['Autonomous Roll No'] ?? newS.r ?? ''
+      ).trim().toLowerCase();
+      const newCollege = String(
+        newS.collegeRollNo ?? newS['College Roll No'] ?? ''
+      ).trim().toLowerCase();
+
+      const existingIdx = existingList.findIndex((item: any) => {
+        const s = item.student || item;
+        const sAuto = String(
+          s.autonomousRollNo ?? s['Autonomous Roll No'] ?? s.r ?? ''
+        ).trim().toLowerCase();
+        const sCollege = String(
+          s.collegeRollNo ?? s['College Roll No'] ?? ''
+        ).trim().toLowerCase();
+
+        return (
+          (newAuto && sAuto === newAuto) ||
+          (newCollege && sCollege === newCollege)
+        );
+      });
+
+      if (existingIdx >= 0) {
+        existingList[existingIdx] = newRes;
+      } else {
+        existingList.push(newRes);
+      }
+    }
+
+    existingRecord.results = existingList;
+    existingRecord.count = existingList.length;
+    existingRecord.passed = calculatePassCount(existingList);
+    existingRecord.failed = existingRecord.count - existingRecord.passed;
+    existingRecord.updatedAt = now;
+
+    if (Array.isArray(departments) && departments.length > 0) {
+      existingRecord.departments = departments;
+    }
+
+    saveDB(db);
+
+    return NextResponse.json({
+      success: true,
+      engine: existingRecord.engine || engine,
+      calculationId: existingRecord.id,
+      count: existingRecord.count,
+      passed: existingRecord.passed,
+      failed: existingRecord.failed,
+      departments: existingRecord.departments || [],
+      results: existingRecord.results,
+    });
+  }
 
   const calculationRecord = {
     id: `CALC-${Date.now()}`,
@@ -276,17 +372,33 @@ export async function POST(
        */
 
       const validRows = students.filter((student) => {
-  const rollNo =
-    student?.['Roll No'] ??
-    student?.['Roll No.'] ??
-    student?.rollNo;
+        const rollNo =
+          student?.['Roll No'] ??
+          student?.['Roll No.'] ??
+          student?.rollNo ??
+          student?.collegeRollNo ??
+          student?.autonomousRollNo ??
+          student?.r;
 
-  return detectUGCourse(rollNo) !== null;
-});
+        const c = student?.course || (course !== 'ALL' ? course : undefined);
+        const b = student?.batch || batch;
+
+        const detected = detectUGCourse(rollNo, c, b);
+        if (!detected) return false;
+
+        // If a specific course was selected (not ALL), filter by course
+        if (course && course !== 'ALL' && detected.course !== course) {
+          return false;
+        }
+
+        return true;
+      });
 
       if (validRows.length === 0) {
         throw new Error(
-          'No valid UG students found. Could not detect course from Roll No.',
+          course && course !== 'ALL'
+            ? `No valid UG students found for course "${course}".`
+            : 'No valid UG students found. Could not detect course from Roll No.',
         );
       }
 
@@ -300,12 +412,18 @@ export async function POST(
         const student of validRows
       ) {
         const rollNo =
-  student?.['Roll No'] ??
-  student?.['Roll No.'] ??
-  student?.rollNo;
+          student?.['Roll No'] ??
+          student?.['Roll No.'] ??
+          student?.rollNo ??
+          student?.collegeRollNo ??
+          student?.autonomousRollNo ??
+          student?.r;
 
-const detected =
-  detectUGCourse(rollNo);
+        const c = student?.course || course;
+        const b = student?.batch || batch;
+
+        const detected =
+          detectUGCourse(rollNo, c, b);
 
         if (!detected) {
           continue;
@@ -323,7 +441,11 @@ const detected =
 
         groups
           .get(key)!
-          .push(student);
+          .push({
+            ...student,
+            course: detected.course,
+            batch: detected.batch,
+          });
       }
 
       const allResults: any[] = [];
@@ -343,18 +465,28 @@ const detected =
 const firstRollNo =
   groupStudents[0]?.['Roll No'] ??
   groupStudents[0]?.['Roll No.'] ??
-  groupStudents[0]?.rollNo;
+  groupStudents[0]?.rollNo ??
+  groupStudents[0]?.collegeRollNo ??
+  groupStudents[0]?.autonomousRollNo ??
+  groupStudents[0]?.r;
 
-const first = detectUGCourse(firstRollNo);
+const first = detectUGCourse(
+  firstRollNo,
+  groupStudents[0]?.course || course,
+  groupStudents[0]?.batch || batch
+);
 
         if (!first) {
           continue;
         }
 
         const mappedStudents =
-          groupStudents.map(
-            mapUGExcelStudent,
-          );
+          groupStudents.map((s) => {
+            if (s.subjects && typeof s.subjects === 'object' && Object.keys(s.subjects).length > 0) {
+              return s;
+            }
+            return mapUGExcelStudent(s);
+          });
 
         const engineRequest:
           EngineRequest = {
@@ -426,9 +558,9 @@ const first = detectUGCourse(firstRollNo);
         engine: {
           program: 'UG',
           semester,
-          batch: '2024',
-          course: 'AUTO',
-          department: 'AUTO',
+          batch: batch || '2024',
+          course: course || 'ALL',
+          department: requestedDepartment || 'ALL',
           label:
             `UG Semester ${semester}`,
         },
@@ -441,12 +573,13 @@ const first = detectUGCourse(firstRollNo);
 
         program: 'UG',
         semester,
-        batch: '2024',
-        course: 'AUTO',
-        department: 'AUTO',
+        batch: batch || '2024',
+        course: course || 'ALL',
+        department: requestedDepartment || 'ALL',
 
         departments:
           courseSummary,
+        calculationId: body.calculationId,
       });
     }
 
@@ -460,10 +593,20 @@ const first = detectUGCourse(firstRollNo);
       );
     }
 
-    const validStudents =
-      students.filter(
-        isValidStudent,
-      );
+    const validStudents = students
+      .map((student: any) => {
+        const studentDept =
+          getDepartment(student) ||
+          (requestedDepartment && requestedDepartment !== 'ALL' && requestedDepartment !== 'AUTO'
+            ? requestedDepartment
+            : '');
+        return {
+          ...student,
+          Department: studentDept,
+          department: studentDept,
+        };
+      })
+      .filter(isValidStudent);
 
     if (
       validStudents.length === 0
@@ -491,6 +634,16 @@ const first = detectUGCourse(firstRollNo);
         continue;
       }
 
+      // If user selected a specific department (not ALL / AUTO), filter by that department
+      if (
+        requestedDepartment &&
+        requestedDepartment !== 'ALL' &&
+        requestedDepartment !== 'AUTO' &&
+        normalizeDepartment(department) !== normalizeDepartment(requestedDepartment)
+      ) {
+        continue;
+      }
+
       if (
         !departmentGroups.has(
           department,
@@ -511,7 +664,9 @@ const first = detectUGCourse(firstRollNo);
       departmentGroups.size === 0
     ) {
       throw new Error(
-        'No PG departments could be detected from the uploaded Excel.',
+        requestedDepartment && requestedDepartment !== 'ALL'
+          ? `No PG students found for department "${requestedDepartment}".`
+          : 'No PG departments could be detected from the student data.',
       );
     }
 
@@ -592,9 +747,9 @@ const first = detectUGCourse(firstRollNo);
       engine: {
         program: 'PG',
         semester,
-        batch,
-        course,
-        department: 'AUTO',
+        batch: batch || '2025',
+        course: course || '',
+        department: requestedDepartment || 'ALL',
         label:
           `PG Semester ${semester}`,
       },
@@ -607,12 +762,13 @@ const first = detectUGCourse(firstRollNo);
 
       program: 'PG',
       semester,
-      batch,
-      course,
-      department: 'AUTO',
+      batch: batch || '2025',
+      course: course || '',
+      department: requestedDepartment || 'ALL',
 
       departments:
         departmentSummary,
+      calculationId: body.calculationId,
     });
   } catch (error) {
     console.error(
@@ -631,6 +787,64 @@ const first = detectUGCourse(firstRollNo);
       {
         status: 400,
       },
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    let id = searchParams.get('id');
+
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body?.id;
+      } catch {}
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Calculation ID is required' },
+        { status: 400 },
+      );
+    }
+
+    const db: any = getDB();
+    if (!Array.isArray(db.calculatedResults)) {
+      db.calculatedResults = [];
+    }
+
+    const initialLength = db.calculatedResults.length;
+    db.calculatedResults = db.calculatedResults.filter(
+      (item: any) => item.id !== id,
+    );
+
+    if (db.calculatedResults.length === initialLength) {
+      return NextResponse.json(
+        { success: false, error: `Calculation "${id}" not found` },
+        { status: 404 },
+      );
+    }
+
+    saveDB(db);
+
+    return NextResponse.json({
+      success: true,
+      message: `Calculation "${id}" deleted successfully`,
+      data: db,
+    });
+  } catch (error) {
+    console.error('Error deleting calculation:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to delete calculation',
+      },
+      { status: 500 },
     );
   }
 }

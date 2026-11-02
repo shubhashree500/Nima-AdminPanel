@@ -33,9 +33,9 @@ const emptyStudent: StudentFields = {
   name: '',
   dob: '',
   abcId: '',
-  department: '',
-  course: '',
-  stream: '',
+  department: 'Chemistry',
+  course: 'M.Sc Chemistry',
+  stream: 'Science',
 };
 
 const fieldLabels: Record<keyof StudentFields, string> = {
@@ -52,27 +52,40 @@ const fieldLabels: Record<keyof StudentFields, string> = {
 };
 
 const fieldAliases: Record<keyof StudentFields, string[]> = {
-  batch: ['batch', 'year', 'academicbatch'],
-  programme: ['programme', 'program', 'prog'],
+  batch: ['batch', 'year', 'academicbatch', 'admissionyear', 'adm_year', 'session'],
+  programme: ['programme', 'program', 'prog', 'degree'],
   autonomousRollNo: [
     'autonomousrollno',
     'autonomousrollnumber',
     'autonomousroll',
-    'rollno',
-    'rollnumber',
-    'roll',
-    'r',
+    'autorollno',
+    'autorollnumber',
+    'autoroll',
   ],
   collegeRollNo: [
     'collegerollno',
     'collegerollnumber',
     'collegeroll',
+    'rollno',
+    'rollnumber',
+    'roll',
+    'r',
   ],
-  name: ['name', 'studentname', 'fullname', 'n'],
+  name: [
+    'nameofthestudents',
+    'nameofthestudent',
+    'nameofstudent',
+    'studentname',
+    'applicantname',
+    'candidatename',
+    'fullname',
+    'name',
+    'n',
+  ],
   dob: ['dob', 'dateofbirth', 'birthdate'],
-  abcId: ['abcid', 'abcidnumber', 'academicbankofcreditsid'],
-  department: ['department', 'dept'],
-  course: ['course', 'subject'],
+  abcId: ['abcid', 'abcidnumber', 'academicbankofcreditsid', 'abc_id'],
+  department: ['department', 'dept', 'major', 'subject', 'honours', 'hons', 'departmentname'],
+  course: ['course', 'degree', 'streamcourse', 'coursename'],
   stream: ['stream', 'faculty'],
 };
 
@@ -100,7 +113,8 @@ function getStudentValue(
 function studentRoll(student: Partial<Student> & Record<string, any>): string {
   return (
     getStudentValue(student, 'autonomousRollNo') ||
-    getStudentValue(student, 'collegeRollNo')
+    getStudentValue(student, 'collegeRollNo') ||
+    String(student.r ?? '').trim()
   );
 }
 
@@ -145,7 +159,10 @@ export function StudentsView({
   const [filterProg, setFilterProg] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
 
+  // Bulk import state
   const [csvText, setCsvText] = useState('');
+  const [importTargetProg, setImportTargetProg] = useState<'UG' | 'PG'>('UG');
+  const [importTargetBatch, setImportTargetBatch] = useState('2024');
   const [impData, setImpData] = useState<{
     add: Student[];
     upd: number;
@@ -161,28 +178,75 @@ export function StudentsView({
     setAddMsg(null);
   };
 
+  // Program switch auto-refresh
+  const handleProgrammeChange = (newProg: string) => {
+    const isPG = newProg.toUpperCase() === 'PG';
+    setForm({
+      programme: newProg,
+      batch: isPG ? '2025' : '2024',
+      autonomousRollNo: '',
+      collegeRollNo: '',
+      name: '',
+      dob: '',
+      abcId: '',
+      department: isPG ? 'Chemistry' : 'Physics',
+      course: isPG ? 'M.Sc Chemistry' : 'BSC',
+      stream: 'Science',
+    });
+    setEditingRoll(null);
+    setAddMsg({
+      text: `Switched to ${newProg} programme. Fields refreshed with ${newProg} defaults.`,
+      type: 'ok',
+    });
+  };
+
+  // Start Edit Mode with visual highlight
   const handleStartEdit = (record: Partial<Student> & Record<string, any>) => {
     const roll = studentRoll(record);
+    const sName = getStudentValue(record, 'name');
     setEditingRoll(roll);
     setForm({
       batch: getStudentValue(record, 'batch') || '2025',
       programme: getStudentValue(record, 'programme') || 'UG',
       autonomousRollNo: getStudentValue(record, 'autonomousRollNo'),
       collegeRollNo: getStudentValue(record, 'collegeRollNo'),
-      name: getStudentValue(record, 'name'),
+      name: sName,
       dob: getStudentValue(record, 'dob'),
       abcId: getStudentValue(record, 'abcId'),
       department: getStudentValue(record, 'department'),
       course: getStudentValue(record, 'course'),
       stream: getStudentValue(record, 'stream'),
     });
-    setAddMsg(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    setAddMsg({
+      text: `Editing mode active for "${sName}" (${roll}). Modify details and click "Save changes".`,
+      type: 'ok',
+    });
+
+    // Smooth scroll to form card
+    const formCard = document.getElementById('student-form-card');
+    if (formCard) {
+      formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleCancelEdit = () => {
+    const isPG = form.programme === 'PG';
     setEditingRoll(null);
-    setForm({ ...emptyStudent });
+    setForm({
+      programme: form.programme,
+      batch: isPG ? '2025' : '2024',
+      autonomousRollNo: '',
+      collegeRollNo: '',
+      name: '',
+      dob: '',
+      abcId: '',
+      department: isPG ? 'Chemistry' : 'Physics',
+      course: isPG ? 'M.Sc Chemistry' : 'BSC',
+      stream: 'Science',
+    });
     setAddMsg(null);
   };
 
@@ -204,7 +268,7 @@ export function StudentsView({
 
     if (!PROG[programme]) {
       setAddMsg({
-        text: 'Programme must be one of the configured programs.',
+        text: 'Programme must be one of the configured programs (UG / PG).',
         type: 'bad',
       });
       return;
@@ -228,9 +292,9 @@ export function StudentsView({
 
       if (success) {
         setEditingRoll(null);
-        setForm({ ...emptyStudent });
+        setForm({ ...emptyStudent, programme: form.programme });
         setAddMsg({
-          text: `Updated student ${name} successfully.`,
+          text: `Updated student "${name}" successfully.`,
           type: 'ok',
         });
       } else {
@@ -248,6 +312,11 @@ export function StudentsView({
   };
 
   const handleAdd = async () => {
+    // If edit mode was on, clear it to prevent replacing
+    if (editingRoll) {
+      setEditingRoll(null);
+    }
+
     const autoRoll = form.autonomousRollNo.trim();
     const collegeRoll = form.collegeRollNo.trim();
     const name = form.name.trim();
@@ -263,7 +332,7 @@ export function StudentsView({
 
     if (!PROG[programme as ProgramKey]) {
       setAddMsg({
-        text: 'Programme must be one of the configured programs.',
+        text: 'Programme must be one of the configured programs (UG / PG).',
         type: 'bad',
       });
       return;
@@ -288,7 +357,7 @@ export function StudentsView({
 
     if (duplicate) {
       setAddMsg({
-        text: 'A student with this autonomous or college roll number already exists.',
+        text: 'A student with this autonomous or college roll number already exists in the database.',
         type: 'bad',
       });
       return;
@@ -300,9 +369,17 @@ export function StudentsView({
       const success = await onAddStudent(student);
 
       if (success) {
-        setForm({ ...emptyStudent });
+        setForm({
+          ...emptyStudent,
+          programme: form.programme,
+          batch: form.programme === 'PG' ? '2025' : '2024',
+          department: form.department,
+          course: form.course,
+          stream: form.stream,
+        });
+        setPageIndex(0); // Move to first page so the new student is seen immediately
         setAddMsg({
-          text: `Added ${name} successfully.`,
+          text: `Added "${name}" successfully! Record saved to main database.`,
           type: 'ok',
         });
       } else {
@@ -327,7 +404,10 @@ export function StudentsView({
       const content = await readSpreadsheetFile(file);
       setCsvText(content);
       setImpData(null);
-      setImpMsg(null);
+      setImpMsg({
+        text: `File "${file.name}" loaded successfully. Click "Check & Preview" to validate.`,
+        type: 'ok',
+      });
     } catch {
       setImpMsg({
         text: 'Error reading spreadsheet file.',
@@ -341,7 +421,7 @@ export function StudentsView({
 
     if (!rows.length) {
       setImpMsg({
-        text: 'Choose a file or paste student data first.',
+        text: 'Choose an Excel/CSV file or paste student rows first.',
         type: 'bad',
       });
       setImpData(null);
@@ -349,43 +429,36 @@ export function StudentsView({
     }
 
     const header = rows[0].map(normalizeHeader);
-    const headerLooksValid = header.some((column) =>
-      [
-        ...fieldAliases.autonomousRollNo,
-        ...fieldAliases.collegeRollNo,
-        ...fieldAliases.name,
-        ...fieldAliases.programme,
-      ].includes(column),
+
+    // Identify columns
+    const columnIndexes = {} as Record<keyof StudentFields, number>;
+    (Object.keys(fieldAliases) as (keyof StudentFields)[]).forEach((field) => {
+      columnIndexes[field] = header.findIndex((column) =>
+        fieldAliases[field].includes(column),
+      );
+    });
+
+    // Handle disambiguation between 'Roll No' and 'Autonomous Roll No'
+    const autoIdx = header.findIndex((c) =>
+      ['autonomousrollno', 'autonomousrollnumber', 'autonomousroll', 'autorollno'].includes(c)
+    );
+    const colIdx = header.findIndex((c) =>
+      ['collegerollno', 'collegerollnumber', 'collegeroll', 'rollno', 'rollnumber', 'roll', 'r'].includes(c)
     );
 
-    const columnIndexes = {} as Record<keyof StudentFields, number>;
-
-    if (headerLooksValid) {
-      (Object.keys(fieldAliases) as (keyof StudentFields)[]).forEach((field) => {
-        columnIndexes[field] = header.findIndex((column) =>
-          fieldAliases[field].includes(column),
-        );
-      });
-    } else {
-      // Legacy three-column format: roll number, name, program.
-      columnIndexes.autonomousRollNo = 0;
-      columnIndexes.collegeRollNo = -1;
-      columnIndexes.name = 1;
-      columnIndexes.programme = 2;
-
-      (
-        [
-          'batch',
-          'dob',
-          'abcId',
-          'department',
-          'course',
-          'stream',
-        ] as (keyof StudentFields)[]
-      ).forEach((field) => {
-        columnIndexes[field] = -1;
-      });
+    if (autoIdx >= 0) {
+      columnIndexes.autonomousRollNo = autoIdx;
     }
+    if (colIdx >= 0 && colIdx !== autoIdx) {
+      columnIndexes.collegeRollNo = colIdx;
+    } else if (columnIndexes.collegeRollNo === autoIdx) {
+      columnIndexes.collegeRollNo = -1;
+    }
+
+    const headerLooksValid =
+      columnIndexes.autonomousRollNo >= 0 ||
+      columnIndexes.collegeRollNo >= 0 ||
+      columnIndexes.name >= 0;
 
     const dataRows = headerLooksValid ? rows.slice(1) : rows;
     const errors: string[] = [];
@@ -394,76 +467,103 @@ export function StudentsView({
     let updatedCount = 0;
 
     dataRows.forEach((row, index) => {
-      const value = (field: keyof StudentFields): string => {
-        const columnIndex = columnIndexes[field];
-        return columnIndex >= 0
-          ? String(row[columnIndex] ?? '').trim()
-          : '';
+      const val = (field: keyof StudentFields): string => {
+        const col = columnIndexes[field];
+        return col !== undefined && col >= 0 ? String(row[col] ?? '').trim() : '';
       };
 
+      let autoRoll = val('autonomousRollNo');
+      let colRoll = val('collegeRollNo');
+      const sName = val('name');
+
+      // If only one roll is present, assign appropriately
+      if (!autoRoll && colRoll) {
+        if (colRoll.toUpperCase().includes('NAC') || colRoll.toUpperCase().startsWith('0') || colRoll.length > 8) {
+          autoRoll = colRoll;
+        }
+      }
+
+      // Target Programme from selection or explicit column
+      let prog = val('programme').toUpperCase();
+      if (!prog || !PROG[prog as ProgramKey]) {
+        prog = importTargetProg;
+      }
+
+      // Auto-detect Batch
+      let batchVal = val('batch');
+      if (!batchVal) {
+        const checkRoll = (autoRoll || colRoll).toUpperCase();
+        if (checkRoll.includes('24')) batchVal = '2024';
+        else if (checkRoll.includes('25')) batchVal = '2025';
+        else if (checkRoll.includes('26')) batchVal = '2026';
+        else batchVal = importTargetBatch || '2024';
+      }
+
+      // Auto-detect Course and Stream
+      let courseVal = val('course');
+      let streamVal = val('stream');
+      const deptVal = val('department');
+
+      if (!courseVal) {
+        const checkRoll = (autoRoll || colRoll).toUpperCase();
+        if (checkRoll.startsWith('BA')) {
+          courseVal = 'BA';
+          if (!streamVal) streamVal = 'Arts';
+        } else if (checkRoll.startsWith('BS')) {
+          courseVal = 'BSC';
+          if (!streamVal) streamVal = 'Science';
+        } else if (checkRoll.startsWith('BC')) {
+          courseVal = 'BCOM';
+          if (!streamVal) streamVal = 'Commerce';
+        } else if (checkRoll.startsWith('BCA')) {
+          courseVal = 'BCA';
+          if (!streamVal) streamVal = 'Science';
+        } else if (checkRoll.startsWith('BBA')) {
+          courseVal = 'BBA';
+          if (!streamVal) streamVal = 'Commerce';
+        } else {
+          courseVal = prog === 'PG' ? (deptVal || 'PG') : 'UG';
+          if (!streamVal) streamVal = 'Science';
+        }
+      }
+
       const fields: StudentFields = {
-        batch: value('batch') || '2025',
-        programme: value('programme').toUpperCase(),
-        autonomousRollNo: value('autonomousRollNo'),
-        collegeRollNo: value('collegeRollNo'),
-        name: value('name'),
-        dob: value('dob'),
-        abcId: value('abcId'),
-        department: value('department'),
-        course: value('course'),
-        stream: value('stream'),
+        batch: batchVal,
+        programme: prog,
+        autonomousRollNo: autoRoll,
+        collegeRollNo: colRoll,
+        name: sName,
+        dob: val('dob'),
+        abcId: val('abcId'),
+        department: deptVal || courseVal || 'General',
+        course: courseVal,
+        stream: streamVal || 'General',
       };
 
       const line = `Row ${index + (headerLooksValid ? 2 : 1)}:`;
 
-      if (
-        !fields.name ||
-        (!fields.autonomousRollNo && !fields.collegeRollNo)
-      ) {
-        errors.push(
-          `${line} student name and at least one roll number are required.`,
-        );
-        return;
-      }
-
-      if (!PROG[fields.programme as ProgramKey]) {
-        errors.push(
-          `${line} invalid programme "${fields.programme}".`,
-        );
+      if (!fields.name || (!fields.autonomousRollNo && !fields.collegeRollNo)) {
+        errors.push(`${line} Missing name or roll number.`);
         return;
       }
 
       const keys = [
-        fields.autonomousRollNo
-          ? `auto:${fields.autonomousRollNo.toLowerCase()}`
-          : '',
-        fields.collegeRollNo
-          ? `college:${fields.collegeRollNo.toLowerCase()}`
-          : '',
+        fields.autonomousRollNo ? `auto:${fields.autonomousRollNo.toLowerCase()}` : '',
+        fields.collegeRollNo ? `col:${fields.collegeRollNo.toLowerCase()}` : '',
       ].filter(Boolean);
 
-      if (keys.some((key) => seen.has(key))) {
-        errors.push(`${line} duplicate roll number in the imported file.`);
+      if (keys.some((k) => seen.has(k))) {
+        errors.push(`${line} Duplicate roll in spreadsheet.`);
         return;
       }
-
-      keys.forEach((key) => seen.add(key));
+      keys.forEach((k) => seen.add(k));
 
       const existing = db.students.some((student) => {
-        const existingAuto = getStudentValue(
-          student as Student & Record<string, any>,
-          'autonomousRollNo',
-        ).toLowerCase();
-        const existingCollege = getStudentValue(
-          student as Student & Record<string, any>,
-          'collegeRollNo',
-        ).toLowerCase();
-
+        const exAuto = getStudentValue(student as Student & Record<string, any>, 'autonomousRollNo').toLowerCase();
+        const exCol = getStudentValue(student as Student & Record<string, any>, 'collegeRollNo').toLowerCase();
         return (
-          (fields.autonomousRollNo &&
-            existingAuto === fields.autonomousRollNo.toLowerCase()) ||
-          (fields.collegeRollNo &&
-            existingCollege === fields.collegeRollNo.toLowerCase())
+          (fields.autonomousRollNo && exAuto === fields.autonomousRollNo.toLowerCase()) ||
+          (fields.collegeRollNo && exCol === fields.collegeRollNo.toLowerCase())
         );
       });
 
@@ -486,14 +586,14 @@ export function StudentsView({
     try {
       await onImportStudents(impData.add);
       setImpMsg({
-        text: `Submitted ${impData.add.length} student records for import.`,
+        text: `Successfully imported ${impData.add.length} student records into database!`,
         type: 'ok',
       });
       setImpData(null);
       setCsvText('');
     } catch {
       setImpMsg({
-        text: 'Import failed. Please try again.',
+        text: 'Import failed. Please check spreadsheet data and try again.',
         type: 'bad',
       });
     }
@@ -504,13 +604,11 @@ export function StudentsView({
 
     return db.students.filter((student) => {
       const record = student as Student & Record<string, any>;
-
       const programme = getStudentValue(record, 'programme').toUpperCase();
       const values = (
         Object.keys(fieldLabels) as (keyof StudentFields)[]
       ).map((field) => getStudentValue(record, field));
 
-      // Include legacy fields in the search as well.
       values.push(
         String(record.r ?? ''),
         String(record.n ?? ''),
@@ -535,105 +633,206 @@ export function StudentsView({
 
   return (
     <>
-      <h1>Students</h1>
-      <p className="sub">
-        Add individual student records, update existing records, or import a student list from Excel/CSV.
-      </p>
+      <div style={{ marginBottom: '16px' }}>
+        <h1 style={{ margin: '0 0 6px 0', fontSize: '26px' }}>Examination — Students Registry</h1>
+        <p className="sub" style={{ margin: 0 }}>
+          Manage enrolled students for examination batches. Add individual students with all details or import bulk lists from Excel/CSV.
+        </p>
+      </div>
 
-      {/* Add / Edit Student Form */}
-      <div className="card">
-        <h2>{editingRoll ? `Edit student (Roll: ${editingRoll})` : 'Add a student'}</h2>
+      {/* Add / Edit Student Form Card */}
+      <div
+        id="student-form-card"
+        className="card"
+        style={{
+          border: editingRoll ? '2px solid #2563eb' : undefined,
+          boxShadow: editingRoll
+            ? '0 0 0 4px rgba(37, 99, 235, 0.2), 0 8px 24px rgba(0,0,0,0.06)'
+            : undefined,
+          transition: 'all 0.3s ease',
+        }}
+      >
+        {/* Edit Mode Notice Banner */}
         {editingRoll && (
-          <p className="hint" style={{ color: 'var(--primary)' }}>
-            Updating existing student record. Modify the fields below and click Save Changes.
-          </p>
+          <div
+            style={{
+              background: 'linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%)',
+              border: '1px solid #93c5fd',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              marginBottom: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '22px' }}>✏️</span>
+              <div>
+                <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '15px' }}>
+                  EDITING STUDENT: {form.name || editingRoll}
+                </div>
+                <div style={{ fontSize: '12px', color: '#1d4ed8', marginTop: '2px' }}>
+                  Roll Key: <strong>{editingRoll}</strong> · Modify the fields below and click "Save changes" or cancel to add a new student.
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn"
+              onClick={handleCancelEdit}
+              style={{
+                background: '#ffffff',
+                border: '1px solid #93c5fd',
+                color: '#1e40af',
+                fontWeight: 600,
+                padding: '6px 14px',
+              }}
+            >
+              ✕ Cancel Edit / New Student
+            </button>
+          </div>
         )}
 
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <h2 style={{ margin: 0 }}>
+            {editingRoll ? `Edit Student (${editingRoll})` : 'Add Student (Individual Entry)'}
+          </h2>
+          <span className="hint">
+            {editingRoll ? 'Updating existing record' : 'Creates new main batch data in database'}
+          </span>
+        </div>
+
         <div className="row">
-          {(Object.keys(fieldLabels) as (keyof StudentFields)[]).map(
-            (field) => (
-              <label key={field}>
-                {fieldLabels[field]}
-                {field === 'programme' ? (
-                  <select
-                    value={form.programme}
-                    onChange={(event) =>
-                      updateField(field, event.target.value)
-                    }
-                  >
-                    {(Object.keys(PROG) as ProgramKey[]).map((programKey) => (
-                      <option key={programKey} value={programKey}>
-                        {programKey}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    placeholder={
-                      field === 'autonomousRollNo'
-                        ? '153NAC25001'
-                        : field === 'collegeRollNo'
-                          ? 'CHEM25-001'
-                          : field === 'name'
-                            ? 'ABINASH SAHOO'
-                            : field === 'dob'
-                              ? '11-02-2004'
-                              : field === 'abcId'
-                                ? '37643'
-                                : field === 'department'
-                                  ? 'Chemistry'
-                                  : field === 'course'
-                                    ? 'Chemistry'
-                                    : field === 'stream'
-                                      ? 'SCIENCE'
-                                      : field === 'batch'
-                                        ? '2025'
-                                        : ''
-                    }
-                    value={form[field]}
-                    onChange={(event) =>
-                      updateField(field, event.target.value)
-                    }
-                  />
-                )}
-              </label>
-            ),
-          )}
+          {(Object.keys(fieldLabels) as (keyof StudentFields)[]).map((field) => (
+            <label key={field}>
+              {fieldLabels[field]}
+              {field === 'programme' ? (
+                <select
+                  value={form.programme}
+                  onChange={(event) => handleProgrammeChange(event.target.value)}
+                >
+                  {(Object.keys(PROG) as ProgramKey[]).map((programKey) => (
+                    <option key={programKey} value={programKey}>
+                      {PROG[programKey].full} ({programKey})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  placeholder={
+                    field === 'autonomousRollNo'
+                      ? (form.programme === 'PG' ? 'NACPG25001' : '03NAC24001')
+                      : field === 'collegeRollNo'
+                      ? (form.programme === 'PG' ? 'CHEM25-001' : 'BA24-001')
+                      : field === 'name'
+                      ? 'Student Full Name'
+                      : field === 'dob'
+                      ? 'YYYY-MM-DD'
+                      : field === 'abcId'
+                      ? 'ABC ID (12 digits)'
+                      : field === 'department'
+                      ? (form.programme === 'PG' ? 'Chemistry' : 'Physics')
+                      : field === 'course'
+                      ? (form.programme === 'PG' ? 'M.Sc Chemistry' : 'BSC')
+                      : field === 'stream'
+                      ? 'Science'
+                      : field === 'batch'
+                      ? (form.programme === 'PG' ? '2025' : '2024')
+                      : ''
+                  }
+                  value={form[field]}
+                  onChange={(event) => updateField(field, event.target.value)}
+                />
+              )}
+            </label>
+          ))}
 
           {editingRoll ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 10 }}>
-              <button className="btn primary" onClick={handleSaveEdit}>
-                Save changes
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 10, flexWrap: 'wrap' }}>
+              <button className="btn primary" onClick={handleSaveEdit} style={{ fontWeight: 700 }}>
+                💾 Save changes
+              </button>
+              <button
+                className="btn danger"
+                onClick={async () => {
+                  if (editingRoll) {
+                    await onDeleteStudent(editingRoll);
+                    handleCancelEdit();
+                  }
+                }}
+                style={{ fontWeight: 600 }}
+              >
+                🗑️ Delete Student
               </button>
               <button className="btn" onClick={handleCancelEdit}>
                 Cancel
               </button>
             </div>
           ) : (
-            <button className="btn primary" onClick={handleAdd}>
-              Add student
-            </button>
+            <div style={{ display: 'flex', alignItems: 'flex-end', marginTop: 10 }}>
+              <button className="btn primary" onClick={handleAdd} style={{ fontWeight: 700 }}>
+                ➕ Add Student
+              </button>
+            </div>
           )}
         </div>
 
-        {addMsg && (
-          <div className={`msg ${addMsg.type}`}>{addMsg.text}</div>
-        )}
+        {addMsg && <div className={`msg ${addMsg.type}`}>{addMsg.text}</div>}
       </div>
 
+      {/* Bulk Import Card */}
       <div className="card">
-        <h2>Import students from Excel / CSV</h2>
-        <p className="hint" style={{ margin: '0 0 10px' }}>
-          Include these columns: <b>batch, programme, autonomousRollNo,
-          collegeRollNo, name, dob, abcId, department, course, stream</b>.
-          Column order does not matter when the headers are included. You can
-          also choose an Excel file or paste spreadsheet cells below.
+        <h2>Bulk Import Students from Excel / CSV</h2>
+        <p className="hint" style={{ margin: '0 0 12px' }}>
+          Upload any official examination spreadsheet (.xlsx, .xls, .csv). Columns are matched automatically including <b>Roll No, Autonomous Roll No, Name of the Students, Department</b>, etc.
         </p>
 
+        {/* Import Preferences Bar */}
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          padding: '10px 14px',
+          background: 'var(--bg-card, rgba(0,0,0,0.02))',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color, #e5e7eb)',
+          marginBottom: '12px',
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600 }}>
+            <span>Target Programme:</span>
+            <select
+              value={importTargetProg}
+              onChange={(e) => setImportTargetProg(e.target.value as 'UG' | 'PG')}
+              style={{ padding: '4px 8px', borderRadius: '6px' }}
+            >
+              <option value="UG">Undergraduate (UG)</option>
+              <option value="PG">Postgraduate (PG)</option>
+            </select>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600 }}>
+            <span>Default Batch:</span>
+            <select
+              value={importTargetBatch}
+              onChange={(e) => setImportTargetBatch(e.target.value)}
+              style={{ padding: '4px 8px', borderRadius: '6px' }}
+            >
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+              <option value="2023">2023</option>
+            </select>
+          </label>
+        </div>
+
         <textarea
-          placeholder={
-            'batch,programme,autonomousRollNo,collegeRollNo,name,dob,abcId,department,course,stream\n2025,PG,153NAC25001,CHEM25-001,ABINASH SAHOO,11-02-2004,37643,Chemistry,Chemistry,SCIENCE'
-          }
+          rows={3}
+          placeholder={`Roll No,Autonomous Roll No,Name of the Students,Department\nBA24-001,01NAC24001,SUBHAM DASH,ECONOMICS\nBA24-002,02NAC24002,PRIYA NAYAK,HISTORY`}
           value={csvText}
           onChange={(event) => {
             setCsvText(event.target.value);
@@ -649,57 +848,55 @@ export function StudentsView({
             style={{ flex: '1 1 200px' }}
             onChange={handleFileChange}
           />
-          <button className="btn" onClick={handlePreviewCSV}>
-            Check file
+          <button className="btn primary" onClick={handlePreviewCSV} style={{ fontWeight: 600 }}>
+            🔍 Check &amp; Preview File
           </button>
         </div>
 
-        {impMsg && (
-          <p className={`msg ${impMsg.type}`}>{impMsg.text}</p>
-        )}
+        {impMsg && <p className={`msg ${impMsg.type}`}>{impMsg.text}</p>}
 
         {impData && (
-          <div style={{ marginTop: 10 }}>
-            <p className="msg ok">
-              {impData.add.length - impData.upd} new, {impData.upd} existing
-              records matched by roll number.
+          <div style={{ marginTop: 12, padding: '14px', borderRadius: '8px', background: 'var(--bg-card, rgba(0,0,0,0.02))', border: '1px solid var(--border-color, #e5e7eb)' }}>
+            <p className="msg ok" style={{ margin: '0 0 10px 0' }}>
+              ✓ <strong>{impData.add.length} valid student record(s)</strong> ready for import ({impData.add.length - impData.upd} new, {impData.upd} updates to existing rolls).
             </p>
 
             {impData.errs.length > 0 && (
-              <>
-                <p className="hint" style={{ color: 'var(--bad)' }}>
-                  {impData.errs.length} row(s) will be skipped:
+              <div style={{ marginBottom: '10px' }}>
+                <p className="hint" style={{ color: 'var(--bad)', fontWeight: 600 }}>
+                  ⚠️ {impData.errs.length} row(s) skipped due to missing required data:
                 </p>
-                <div className="hint">
-                  {impData.errs.slice(0, 8).map((error, index) => (
+                <div className="hint" style={{ maxHeight: '100px', overflowY: 'auto' }}>
+                  {impData.errs.slice(0, 5).map((error, index) => (
                     <div key={index}>{error}</div>
                   ))}
-                  {impData.errs.length > 8 && (
-                    <div>And {impData.errs.length - 8} more.</div>
+                  {impData.errs.length > 5 && (
+                    <div>...and {impData.errs.length - 5} more.</div>
                   )}
                 </div>
-              </>
+              </div>
             )}
 
             {impData.add.length > 0 && (
               <button
                 className="btn primary"
-                style={{ marginTop: 12 }}
+                style={{ fontWeight: 700, padding: '10px 20px' }}
                 onClick={handleDoImport}
               >
-                Import {impData.add.length} students
+                📥 Confirm &amp; Save {impData.add.length} Students to Database
               </button>
             )}
           </div>
         )}
       </div>
 
+      {/* Student Registry Table */}
       <div className="card">
         <div className="row">
-          <label>
+          <label style={{ flex: 2 }}>
             Search student records
             <input
-              placeholder="Search roll, name, department, ABC ID..."
+              placeholder="Search by roll number, name, department, ABC ID..."
               value={searchQuery}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
@@ -720,11 +917,35 @@ export function StudentsView({
               <option value="">All programmes</option>
               {(Object.keys(PROG) as ProgramKey[]).map((programKey) => (
                 <option key={programKey} value={programKey}>
-                  {PROG[programKey].full}
+                  {PROG[programKey].full} ({programKey})
                 </option>
               ))}
             </select>
           </label>
+        </div>
+
+        {/* Total Students display under search and programs */}
+        <div style={{
+          marginTop: '10px',
+          marginBottom: '6px',
+          padding: '8px 14px',
+          backgroundColor: '#eff6ff',
+          borderRadius: '6px',
+          border: '1px solid #bfdbfe',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '13px',
+        }}>
+          <div>
+            <strong style={{ color: '#1e40af' }}>Total Students:</strong>{' '}
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>{filteredStudents.length}</span> students enrolled
+            {db.students.length !== filteredStudents.length && (
+              <span style={{ color: '#64748b', fontSize: '12px' }}>
+                {' '}(filtered from {db.students.length} total)
+              </span>
+            )}
+          </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
@@ -756,13 +977,31 @@ export function StudentsView({
                     {paginatedList.map((student) => {
                       const record = student as Student & Record<string, any>;
                       const roll = studentRoll(record);
+                      const isRowEditing = editingRoll === roll;
 
                       return (
-                        <tr key={roll}>
+                        <tr
+                          key={roll}
+                          style={{
+                            background: isRowEditing ? 'rgba(37, 99, 235, 0.08)' : undefined,
+                            fontWeight: isRowEditing ? 600 : undefined,
+                          }}
+                        >
                           <td>{getStudentValue(record, 'batch') || '—'}</td>
-                          <td>{getStudentValue(record, 'programme') || '—'}</td>
                           <td>
-                            {getStudentValue(record, 'autonomousRollNo') || '—'}
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: getStudentValue(record, 'programme') === 'PG' ? '#f3e8ff' : '#dbeafe',
+                              color: getStudentValue(record, 'programme') === 'PG' ? '#7e22ce' : '#1e40af',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                            }}>
+                              {getStudentValue(record, 'programme') || '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{getStudentValue(record, 'autonomousRollNo') || '—'}</strong>
                           </td>
                           <td>
                             {getStudentValue(record, 'collegeRollNo') || '—'}
@@ -776,16 +1015,24 @@ export function StudentsView({
                           <td className="num">
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                               <button
-                                className="btn"
+                                className={`btn ${isRowEditing ? 'primary' : ''}`}
                                 onClick={() => handleStartEdit(record)}
+                                style={{ padding: '4px 10px', fontSize: '12px' }}
                               >
-                                Edit
+                                {isRowEditing ? '✏️ Editing...' : 'Edit'}
                               </button>
                               <button
                                 className="btn danger"
-                                onClick={() => onDeleteStudent(roll)}
+                                onClick={async () => {
+                                  await onDeleteStudent(roll);
+                                  if (editingRoll === roll) {
+                                    handleCancelEdit();
+                                  }
+                                }}
+                                style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600 }}
+                                title="Delete student"
                               >
-                                Remove
+                                🗑️ Delete
                               </button>
                             </div>
                           </td>
@@ -796,15 +1043,11 @@ export function StudentsView({
                 </table>
               </div>
 
-              <div className="pager">
-                <span>{filteredStudents.length} students</span>
-
+              <div className="pager" style={{ marginTop: 14 }}>
                 <button
                   className="btn"
                   disabled={currentPage <= 0}
-                  onClick={() =>
-                    setPageIndex(Math.max(0, currentPage - 1))
-                  }
+                  onClick={() => setPageIndex(Math.max(0, currentPage - 1))}
                 >
                   Previous
                 </button>
@@ -817,9 +1060,7 @@ export function StudentsView({
                   className="btn"
                   disabled={currentPage >= totalPages - 1}
                   onClick={() =>
-                    setPageIndex(
-                      Math.min(totalPages - 1, currentPage + 1),
-                    )
+                    setPageIndex(Math.min(totalPages - 1, currentPage + 1))
                   }
                 >
                   Next

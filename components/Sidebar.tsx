@@ -24,6 +24,8 @@ type SidebarProps = {
   currentPage: PageKey;
   onPageChange: (page: PageKey) => void;
   isSyncing?: boolean;
+  user?: { username: string; role?: string } | null;
+  onLogout?: () => void;
 };
 
 type MenuItem = {
@@ -234,10 +236,7 @@ const sections: MenuSection[] = [
     label: 'Examination',
     icon: 'calendar',
     items: [
-      { id: 'exam-sessions', label: 'Exam Setup & Sessions', icon: 'calendar' },
-      { id: 'setup', label: 'College Setup & Subjects', icon: 'setup' },
       { id: 'students', label: 'Students', icon: 'students' },
-      { id: 'marks', label: 'Marks Entry', icon: 'marks' },
     ],
   },
   {
@@ -247,18 +246,8 @@ const sections: MenuSection[] = [
     items: [
       {
         id: 'process',
-        label: 'Result Processing (Calculate)',
+        label: 'Result Processing',
         icon: 'calculator',
-      },
-      {
-        id: 'verify',
-        label: 'Verification',
-        icon: 'verify',
-      },
-      {
-        id: 'publish',
-        label: 'Publication',
-        icon: 'publish',
       },
     ],
   },
@@ -300,6 +289,8 @@ export function Sidebar({
   currentPage,
   onPageChange,
   isSyncing = false,
+  user,
+  onLogout,
 }: SidebarProps) {
   const [openSections, setOpenSections] = useState<
     Record<string, boolean>
@@ -434,6 +425,27 @@ export function Sidebar({
           </span>
         </div>
 
+        {user && (
+          <div style={{
+            padding: '8px 12px',
+            background: 'var(--surface-color, rgba(255,255,255,0.06))',
+            borderRadius: '8px',
+            margin: '8px 0',
+            fontSize: '12px',
+            border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-color, #e5e7eb)' }}>
+              {user.username}
+            </div>
+            <div style={{ opacity: 0.7, fontSize: '11px' }}>
+              {user.role || 'Administrator'}
+            </div>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => onPageChange('settings')}
@@ -444,6 +456,38 @@ export function Sidebar({
           <Icon name="settings" size={17} />
           <span>Settings</span>
         </button>
+
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              width: '100%',
+              borderRadius: '6px',
+              border: 'none',
+              background: 'transparent',
+              color: '#ef4444',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              marginTop: '4px',
+              transition: 'background 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+            onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>Sign Out</span>
+          </button>
+        )}
 
         <div className="sidebar-version">
           Result Management System
