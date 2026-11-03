@@ -173,11 +173,21 @@ export function RecheckingView() {
         fetch('/api/result-corrections?includeAll=true', { cache: 'no-store' }),
       ]);
 
+      if (!verRes.ok) {
+        const text = await verRes.text();
+        let errorMsg = `Could not load examinations (${verRes.status})`;
+        try {
+          const j = JSON.parse(text);
+          if (j.error) errorMsg = j.error;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+
       const verJson = await verRes.json();
       const recJson = await recRes.json();
       const corrJson = await corrRes.json();
 
-      if (!verRes.ok || !verJson.success) {
+      if (!verJson.success) {
         throw new Error(
           verJson.error || 'Could not load published examinations.'
         );

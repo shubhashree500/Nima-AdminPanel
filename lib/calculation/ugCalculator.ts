@@ -91,11 +91,38 @@ function parseMark(
   };
 }
 
+const PAPER_ALIASES: Record<string, string[]> = {
+  'core-1': ['core-1', 'core-1-major-1', 'major-1', 'major-cp-1', 'cc-1', 'major cp 1'],
+  'core-1-major-1': ['core-1', 'core-1-major-1', 'major-1', 'major-cp-1', 'cc-1', 'major cp 1'],
+  'core-2': ['core-2', 'core-1-major-2', 'major-2', 'major-cp-2', 'cc-2', 'major cp 2'],
+  'core-1-major-2': ['core-2', 'core-1-major-2', 'major-2', 'major-cp-2', 'cc-2', 'major cp 2'],
+  'minor-1': ['minor-1', 'core-2-minor-1', 'minor', 'minor-3', 'cc-3', 'cc-103'],
+  'core-2-minor-1': ['minor-1', 'core-2-minor-1', 'minor', 'minor-3', 'cc-3', 'cc-103'],
+  'mdc-1': ['mdc-1', 'multidisciplinary-1', 'multidisciplinary', 'mdc', 'mde-101'],
+  'multidisciplinary-1': ['multidisciplinary-1', 'mdc-1', 'multidisciplinary', 'mdc', 'mde-101'],
+  'aec-1': ['aec-1', 'aec-i', 'aec', 'aec-101'],
+  'aec-i': ['aec-i', 'aec-1', 'aec', 'aec-101'],
+  'vac-1': ['vac-1', 'vac-i', 'vac', 'vac-101'],
+  'vac-i': ['vac-i', 'vac-1', 'vac', 'vac-101'],
+  'major-cp-5': ['major-cp-5', 'major-cp-1', 'cp-5', 'major cp 1', 'major-5'],
+  'major-cp-6': ['major-cp-6', 'major-cp-2', 'cp-6', 'major cp 2', 'major-6'],
+  'major-cp-7': ['major-cp-7', 'major-cp-3', 'cp-7', 'major cp 3', 'major-7'],
+  'minor-3': ['minor-3', 'minor 3', 'minor-1'],
+  'vac-2': ['vac-2', 'vac-ii', 'vac 2'],
+};
+
+function normalizePaperKey(key: string): string {
+  return key.trim().toLowerCase().replace(/[-_\s]/g, '');
+}
+
 function findStudentSubject(
   student: any,
   paper: PaperConfig,
 ): any {
   const subjects = student?.subjects;
+  const paperCode = paper.code.trim().toLowerCase();
+  const cleanPaper = normalizePaperKey(paperCode);
+  const aliases = PAPER_ALIASES[paperCode] || [paperCode];
 
   if (
     subjects &&
@@ -105,40 +132,38 @@ function findStudentSubject(
     if (subjects[paper.code] !== undefined) {
       return subjects[paper.code];
     }
-  }
 
-  if (Array.isArray(subjects)) {
-    const found = subjects.find(
-      (subject: any) =>
-        String(
-          subject?.code ??
-            subject?.paperCode ??
-            subject?.courseType ??
-            subject?.paper?.code ??
-            '',
-        )
-          .trim()
-          .toLowerCase() === paper.code.trim().toLowerCase(),
-    );
-
-    if (found) {
-      return found;
+    for (const [key, val] of Object.entries(subjects)) {
+      const lowerKey = key.trim().toLowerCase();
+      const cleanKey = normalizePaperKey(key);
+      if (lowerKey === paperCode || cleanKey === cleanPaper) {
+        return val;
+      }
+      if (aliases.some((a) => lowerKey === a || normalizePaperKey(a) === cleanKey)) {
+        return val;
+      }
     }
   }
 
-  if (Array.isArray(student?.courses)) {
-    const found = student.courses.find(
-      (subject: any) =>
-        String(
-          subject?.code ??
-            subject?.paperCode ??
-            subject?.courseType ??
-            subject?.paper?.code ??
-            '',
-        )
-          .trim()
-          .toLowerCase() === paper.code.trim().toLowerCase(),
-    );
+  const list = Array.isArray(subjects)
+    ? subjects
+    : Array.isArray(student?.courses)
+    ? student.courses
+    : null;
+
+  if (list) {
+    const found = list.find((subject: any) => {
+      const sCode = String(
+        subject?.code ??
+          subject?.paperCode ??
+          subject?.courseType ??
+          subject?.paper?.code ??
+          '',
+      ).trim().toLowerCase();
+      const cleanCode = normalizePaperKey(sCode);
+      if (sCode === paperCode || cleanCode === cleanPaper) return true;
+      return aliases.some((a) => sCode === a || normalizePaperKey(a) === cleanCode);
+    });
 
     if (found) {
       return found;
@@ -497,13 +522,24 @@ export function calculateUGStudent(
     totalGraceLimit - usedGrace,
   );
 
+  const isPassed = subjects.every(
+    (s) => s.grade !== 'F' && s.grade !== 'AB' && s.grade !== 'M'
+  );
+
   return {
     student,
     subjects,
+    totalMarks,
+    grandTotal: totalMarks,
+    totalFullMarks,
     totalCredits,
     totalCreditPoints: roundNumber(totalCreditPoints, 2),
     sgpa,
     percentage,
+    isPassed,
+    passed: isPassed,
+    resultStatus: isPassed ? 'PASS' : 'FAIL',
+    status: isPassed ? 'PASS' : 'FAIL',
     usedGrace,
     remainingGrace,
   };

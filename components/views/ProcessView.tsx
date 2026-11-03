@@ -468,15 +468,28 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
         };
       });
 
+      let studentCourse = course !== 'ALL' && course !== 'AUTO' ? course : '';
+      if (!studentCourse) {
+        const d = activeDept.toLowerCase();
+        if (d.includes('bba')) studentCourse = 'BBA';
+        else if (d.includes('bca')) studentCourse = 'BCA';
+        else if (d.includes('com')) studentCourse = 'BCOM';
+        else if (d.includes('odia') || d.includes('hist') || d.includes('pol') || d.includes('econ') || d.includes('edu') || d.includes('eng') || d.includes('arts')) studentCourse = 'BA';
+        else studentCourse = 'BSC';
+      }
+
       studentObj = {
         'Roll No': college || auto,
         'Roll No.': college || auto,
+        collegeRollNo: college || auto,
         'Autonomous Roll No': auto || college,
         'Autonomous Roll No.': auto || college,
+        autonomousRollNo: auto || college,
         'Name of the Students': name,
+        name: name,
         Department: activeDept,
         department: activeDept,
-        course: course === 'ALL' ? 'BSC' : course,
+        course: studentCourse,
         batch: Number(batch) || 2024,
         subjects: subjectsMap,
       };
@@ -493,7 +506,7 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
           program,
           semester,
           batch,
-          course: course === 'ALL' ? (program === 'UG' ? 'AUTO' : '') : course,
+          course: course === 'ALL' ? 'AUTO' : course,
           department: activeDept,
           students: [studentObj],
         }),
@@ -1354,24 +1367,26 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
             </div>
           </div>
 
-          {/* Department Breakdown if PG */}
-          {program === 'PG' && result.departments?.length > 0 && (
+          {/* Course / Department Breakdown */}
+          {result.departments?.length > 0 && (
             <div style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>Department Breakdown</h3>
+              <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>
+                {program === 'UG' ? 'Course Breakdown' : 'Department Breakdown'}
+              </h3>
               <div className="scroll">
                 <table>
                   <thead>
                     <tr>
-                      <th>Department</th>
+                      <th>{program === 'UG' ? 'Course / Department' : 'Department'}</th>
                       <th>Students</th>
                       <th>Passed</th>
                       <th>Failed</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {result.departments.map((item: any) => (
-                      <tr key={item.department}>
-                        <td><strong>{item.department}</strong></td>
+                    {result.departments.map((item: any, idx: number) => (
+                      <tr key={item.department || item.course || idx}>
+                        <td><strong>{item.course || item.department}</strong></td>
                         <td>{item.count}</td>
                         <td style={{ color: '#059669', fontWeight: 600 }}>{item.passed}</td>
                         <td style={{ color: item.failed > 0 ? '#dc2626' : 'inherit', fontWeight: item.failed > 0 ? 600 : 400 }}>{item.failed}</td>

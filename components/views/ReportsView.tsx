@@ -34,7 +34,18 @@ function rollsOf(result: any): string[] {
 }
 function rollOf(result: any) { const s = identity(result); return s['College Roll No'] || s['College Roll No.'] || s['Roll No'] || s['College Roll'] || s.collegeRollNo || s.roll || s.rollNo || s['Autonomous Roll No'] || s.autonomousRollNo || '-'; }
 function nameOf(result: any) { const s = identity(result); return s['Applicant Name'] || s['Name of the Students'] || s['Student Name'] || s.name || s.studentName || rollOf(result); }
-function deptOf(result: any) { const s = identity(result); return s.Department || s.department || s.course || '-'; }
+function deptOf(result: any) {
+  const s = identity(result);
+  const dept = s.Department || s.department;
+  if (dept && String(dept).trim().toLowerCase() !== 'department') {
+    return String(dept).trim();
+  }
+  const course = s.course;
+  if (course && !['bsc', 'ba', 'bcom', 'ug', 'pg'].includes(String(course).trim().toLowerCase())) {
+    return String(course).trim();
+  }
+  return '-';
+}
 function subjectsOf(result: any): any[] { return Array.isArray(result?.subjects) ? result.subjects : []; }
 function totalOf(result: any) { return subjectsOf(result).reduce((sum, subject) => sum + (Number(subject?.marks) || 0), 0); }
 function maxOf(result: any) { return subjectsOf(result).reduce((sum, subject) => sum + (Number(subject?.fullMark) || 0), 0); }
@@ -43,14 +54,87 @@ function csvEscape(value: unknown) { const text = String(value ?? ''); return `"
 
 function normalizeDepartment(department: unknown): string {
   if (!department) return '';
-  const value = String(department).trim().toLowerCase();
-  if (value === 'odia') return 'Odia';
-  if (value === 'chemistry' || value === 'chem') return 'Chemistry';
-  if (value === 'math' || value === 'mathematics') return 'Mathematics';
-  if (value === 'geology') return 'Geology';
-  if (value === 'commerce') return 'Commerce';
-  if (value === 'mfc' || value === 'master of finance and control') return 'MFC';
-  return String(department).trim();
+  const raw = String(department).trim();
+  const lower = raw.toLowerCase();
+
+  // Filter out headers, empty course fallbacks, and placeholder labels
+  if (
+    [
+      'department',
+      'department name',
+      'dept',
+      'dept name',
+      'all',
+      'auto',
+      '-',
+      'bsc',
+      'ba',
+      'bcom',
+      'roll no',
+      'roll',
+      'name',
+      'name of the students',
+      'student name',
+    ].includes(lower)
+  ) {
+    return '';
+  }
+
+  // Arts
+  if (lower === 'odia') return 'Odia';
+  if (lower === 'economics' || lower === 'eco') return 'Economics';
+  if (lower === 'education' || lower === 'edu') return 'Education';
+  if (lower === 'english' || lower === 'eng') return 'English';
+  if (lower === 'history' || lower === 'hist') return 'History';
+  if (
+    lower === 'political science' ||
+    lower === 'pol.science' ||
+    lower === 'pol science' ||
+    lower === 'pol sc' ||
+    lower === 'polsc'
+  )
+    return 'Political Science';
+  if (lower === 'psychology' || lower === 'psy') return 'Psychology';
+  if (lower === 'sanskrit' || lower === 'sans') return 'Sanskrit';
+  if (lower === 'philosophy' || lower === 'phil') return 'Philosophy';
+  if (lower === 'sociology' || lower === 'soc') return 'Sociology';
+  if (lower === 'hindi') return 'Hindi';
+  if (lower === 'geography' || lower === 'geog') return 'Geography';
+  if (lower === 'home science' || lower === 'home sc') return 'Home Science';
+  if (lower === 'anthropology' || lower === 'anth') return 'Anthropology';
+
+  // Science
+  if (lower === 'botany' || lower === 'bot') return 'Botany';
+  if (lower === 'chemistry' || lower === 'chem') return 'Chemistry';
+  if (lower === 'geology' || lower === 'geol') return 'Geology';
+  if (lower === 'mathematics' || lower === 'math') return 'Mathematics';
+  if (lower === 'physics' || lower === 'phy') return 'Physics';
+  if (lower === 'zoology' || lower === 'zoo') return 'Zoology';
+  if (
+    lower === 'bca' ||
+    lower === 'computer application' ||
+    lower === 'computer applications'
+  )
+    return 'BCA';
+  if (lower === 'computer science' || lower === 'cs' || lower === 'csc')
+    return 'Computer Science';
+  if (lower === 'statistics' || lower === 'stats') return 'Statistics';
+  if (lower === 'electronics') return 'Electronics';
+  if (lower === 'biotechnology' || lower === 'biotech') return 'Biotechnology';
+
+  // Commerce
+  if (lower === 'commerce' || lower === 'comm') return 'Commerce';
+  if (lower === 'bba') return 'BBA';
+  if (lower === 'mfc' || lower === 'master of finance and control')
+    return 'MFC';
+  if (lower === 'accounting' || lower === 'accountancy') return 'Accounting';
+  if (lower === 'finance') return 'Finance';
+
+  // Fallback: title case
+  return raw
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function autoRollOf(result: any): string {
@@ -69,11 +153,14 @@ function examCodeOf(result: any): string {
 }
 
 function getFullMark(department: string, subject: any, index: number): number {
-  if (subject?.fullMark || subject?.fullMarks) {
-    return Number(subject.fullMark || subject.fullMarks);
+  const sub = typeof subject === 'object' && subject !== null ? subject : typeof index === 'object' && index !== null ? index : null;
+  const idx = typeof index === 'number' ? index : typeof subject === 'number' ? subject : 0;
+
+  if (sub?.fullMark || sub?.fullMarks) {
+    return Number(sub.fullMark || sub.fullMarks);
   }
   const dept = String(department || '').toLowerCase();
-  if (dept === 'chemistry' && (index === 3 || index === 4)) {
+  if (dept === 'chemistry' && (idx === 3 || idx === 4)) {
     return 50;
   }
   if (dept === 'chemistry') {
@@ -83,33 +170,102 @@ function getFullMark(department: string, subject: any, index: number): number {
 }
 
 function getMidsemMark(subject: any, student: any, index: number): string | number {
-  if (subject?.midsemMark !== undefined && subject?.midsemMark !== null && subject?.midsemMark !== '') {
-    return subject.midsemMark;
+  let sub = subject || {};
+  let st = student?.student || student || {};
+  if (Array.isArray(subject?.subjects) && !Array.isArray(student?.subjects)) {
+    st = subject?.student || subject;
+    sub = student || {};
   }
-  if (subject?.midsemMarks !== undefined && subject?.midsemMarks !== null) {
-    return subject.midsemMarks;
+  const pCode = String(sub.paperCode || sub.code || '').trim();
+
+  // 1. Direct properties on subject
+  if (sub.midsemMark !== undefined && sub.midsemMark !== null && String(sub.midsemMark).trim() !== '') return sub.midsemMark;
+  if (sub.MidsemMark !== undefined && sub.MidsemMark !== null && String(sub.MidsemMark).trim() !== '') return sub.MidsemMark;
+  if (sub.midsemMarks !== undefined && sub.midsemMarks !== null && String(sub.midsemMarks).trim() !== '') return sub.midsemMarks;
+
+  // 2. Check student.subjects (mapped object or array)
+  if (st.subjects) {
+    let subObj: any = null;
+    if (pCode && st.subjects[pCode]) subObj = st.subjects[pCode];
+    else if (Array.isArray(st.subjects)) subObj = st.subjects[index];
+    else if (typeof st.subjects === 'object') subObj = Object.values(st.subjects)[index];
+    if (subObj) {
+      const val = subObj.MidsemMark ?? subObj.midsemMark ?? subObj.midsemMarks;
+      if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+    }
   }
+
+  // 3. Check student flat keys or rawExcelRow
+  const sources = [st, st.rawExcelRow].filter(Boolean);
   const suffix = index === 0 ? '' : `_${index}`;
-  const key = `Midsem-Mark${suffix}`;
-  if (student?.[key] !== undefined && student?.[key] !== null && student?.[key] !== '') {
-    return student[key];
+  const keys = [
+    `Midsem-Mark${suffix}`,
+    `MidsemMark${suffix}`,
+    `midsemMark${suffix}`,
+    `Midsem-Mark_${index}`,
+    `MidsemMark_${index}`,
+    `midsemMark_${index}`,
+    `Midsem-Mark`,
+    `MidsemMark`,
+  ];
+  for (const src of sources) {
+    for (const k of keys) {
+      if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return src[k];
+    }
   }
   return '—';
 }
 
 function getFinalMark(subject: any, student: any, index: number): string | number {
-  if (subject?.finalMark !== undefined && subject?.finalMark !== null && subject?.finalMark !== '') {
-    return subject.finalMark;
+  let sub = subject || {};
+  let st = student?.student || student || {};
+  if (Array.isArray(subject?.subjects) && !Array.isArray(student?.subjects)) {
+    st = subject?.student || subject;
+    sub = student || {};
   }
-  if (subject?.endSemMarks !== undefined && subject?.endSemMarks !== null) {
-    return subject.endSemMarks;
+  const pCode = String(sub.paperCode || sub.code || '').trim();
+
+  // 1. Direct properties on subject
+  if (sub.finalMark !== undefined && sub.finalMark !== null && String(sub.finalMark).trim() !== '') return sub.finalMark;
+  if (sub.FinalMark !== undefined && sub.FinalMark !== null && String(sub.FinalMark).trim() !== '') return sub.FinalMark;
+  if (sub.endSemMarks !== undefined && sub.endSemMarks !== null && String(sub.endSemMarks).trim() !== '') return sub.endSemMarks;
+  if (sub.endSemMark !== undefined && sub.endSemMark !== null && String(sub.endSemMark).trim() !== '') return sub.endSemMark;
+
+  // 2. Check student.subjects (mapped object or array)
+  if (st.subjects) {
+    let subObj: any = null;
+    if (pCode && st.subjects[pCode]) subObj = st.subjects[pCode];
+    else if (Array.isArray(st.subjects)) subObj = st.subjects[index];
+    else if (typeof st.subjects === 'object') subObj = Object.values(st.subjects)[index];
+    if (subObj) {
+      const val = subObj.FinalMark ?? subObj.finalMark ?? subObj.endSemMarks ?? subObj.endSemMark;
+      if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+    }
   }
+
+  // 3. Check student flat keys or rawExcelRow
+  const sources = [st, st.rawExcelRow].filter(Boolean);
   const suffix = index === 0 ? '' : `_${index}`;
-  const key = `Final-Mark${suffix}`;
-  if (student?.[key] !== undefined && student?.[key] !== null && student?.[key] !== '') {
-    return student[key];
+  const keys = [
+    `Final-Mark${suffix}`,
+    `FinalMark${suffix}`,
+    `finalMark${suffix}`,
+    `Final-Mark_${index}`,
+    `FinalMark_${index}`,
+    `finalMark_${index}`,
+    `EndSem-Mark${suffix}`,
+    `EndSemMark${suffix}`,
+    `Final-Mark`,
+    `FinalMark`,
+  ];
+  for (const src of sources) {
+    for (const k of keys) {
+      if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return src[k];
+    }
   }
-  return subject?.marks ?? '—';
+
+  if (sub.marks !== undefined && sub.marks !== null && String(sub.marks).trim() !== '') return sub.marks;
+  return '—';
 }
 
 function getClassification(student: any): string {
@@ -150,16 +306,36 @@ const load = useCallback(async () => {
       fetch('/api/result-corrections', { cache: 'no-store' }),
     ]);
 
+    if (!response.ok) {
+      const text = await response.text();
+      let errorMsg = `Unable to load result records (${response.status})`;
+      try {
+        const j = JSON.parse(text);
+        if (j.error) errorMsg = j.error;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+
+    if (!correctionsResponse.ok) {
+      const text = await correctionsResponse.text();
+      let errorMsg = `Unable to load result corrections (${correctionsResponse.status})`;
+      try {
+        const j = JSON.parse(text);
+        if (j.error) errorMsg = j.error;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+
     const json = await response.json();
     const correctionsJson = await correctionsResponse.json();
 
-    if (!response.ok || !json.success) {
+    if (!json.success) {
       throw new Error(
         json.error || 'Unable to load result records.'
       );
     }
 
-    if (!correctionsResponse.ok || !correctionsJson.success) {
+    if (!correctionsJson.success) {
       throw new Error(
         correctionsJson.error || 'Unable to load result corrections.'
       );
@@ -205,7 +381,17 @@ const load = useCallback(async () => {
   const selected = records.find((r) => r.id === selectedId);
   
 const reportResults = useMemo(() => {
-  const originalResults = selected?.results || [];
+  const originalResults = (selected?.results || []).filter((r: any) => {
+    const s = identity(r);
+    const roll = String(s['College Roll No'] || s['College Roll No.'] || s['Roll No'] || s['College Roll'] || s.collegeRollNo || s.roll || s.rollNo || s['Autonomous Roll No'] || s.autonomousRollNo || '').trim().toLowerCase();
+    const name = String(s['Applicant Name'] || s['Name of the Students'] || s['Student Name'] || s.name || s.studentName || '').trim().toLowerCase();
+    const dept = String(s.Department || s.department || '').trim().toLowerCase();
+
+    if (!roll || roll === '-' || roll === 'roll no' || roll === 'autonomous roll no') return false;
+    if (name === 'name of the students' || name === 'student name' || name === 'name') return false;
+    if (dept === 'department' || dept === 'department name') return false;
+    return true;
+  });
 
   if (!selected) return [];
 
@@ -295,19 +481,80 @@ const reportResults = useMemo(() => {
 
 
 
-  const STREAMS = [
+  const STREAMS_PG = [
     { name: 'Arts', departments: ['Odia'] },
     { name: 'Science', departments: ['Chemistry', 'Geology', 'Mathematics'] },
     { name: 'Commerce', departments: ['Commerce'] },
     { name: 'MFC', departments: ['MFC'] },
   ];
 
+  const STREAMS_UG = [
+    {
+      name: 'Arts',
+      departments: [
+        'Economics',
+        'Education',
+        'English',
+        'History',
+        'Odia',
+        'Political Science',
+        'Psychology',
+        'Sanskrit',
+        'Philosophy',
+        'Sociology',
+        'Hindi',
+        'Geography',
+        'Home Science',
+        'Anthropology',
+      ],
+    },
+    {
+      name: 'Science',
+      departments: [
+        'Botany',
+        'Chemistry',
+        'Geology',
+        'Mathematics',
+        'Physics',
+        'Zoology',
+        'Computer Science',
+        'Electronics',
+        'Statistics',
+        'Biotechnology',
+      ],
+    },
+    {
+      name: 'Commerce',
+      departments: ['Commerce', 'Accounting', 'Finance'],
+    },
+    {
+      name: 'BCA',
+      departments: ['BCA', 'Computer Applications'],
+    },
+    {
+      name: 'BBA',
+      departments: ['BBA', 'Business Administration'],
+    },
+  ];
+
   const PREFERRED_DEPT_ORDER = [
     'Odia',
+    'Economics',
+    'Education',
+    'English',
+    'History',
+    'Political Science',
+    'Psychology',
+    'Sanskrit',
+    'Botany',
     'Chemistry',
-    'Mathematics',
-    'Commerce',
     'Geology',
+    'Mathematics',
+    'Physics',
+    'Zoology',
+    'Commerce',
+    'BCA',
+    'BBA',
     'MFC',
   ];
 
@@ -393,45 +640,105 @@ const reportResults = useMemo(() => {
       new Set(sourceStudents.map((s) => normalizeDepartment(deptOf(s))))
     ).filter(Boolean);
 
-    const knownDepts = new Set(STREAMS.flatMap((s) => s.departments));
+    const isPG = String(selected.program || '').trim().toUpperCase() === 'PG';
+    const streamDefinitions = isPG ? STREAMS_PG : STREAMS_UG;
+    const knownDepts = new Set(streamDefinitions.flatMap((s) => s.departments));
+    const unlistedDepts = presentDepts.filter((d) => !knownDepts.has(d));
 
-    const streams = STREAMS.map((stream) => {
-      const depts = stream.departments.filter((d) =>
-        presentDepts.includes(d)
+    // Map unlisted departments to Arts, Science, Commerce, BCA, or BBA by student course / keywords
+    const extraArts: string[] = [];
+    const extraScience: string[] = [];
+    const extraCommerce: string[] = [];
+    const extraBca: string[] = [];
+    const extraBba: string[] = [];
+    const extraOther: string[] = [];
+
+    unlistedDepts.forEach((d) => {
+      const deptStudents = sourceStudents.filter(
+        (s) => normalizeDepartment(deptOf(s)) === d
       );
-      const departmentStats = depts.map(calculateDeptStats);
-      const total = departmentStats.reduce(
-        (acc, r) => {
-          acc.appeared += r.appeared;
-          acc.cleared += r.cleared;
-          acc.backFail += r.backFail;
-          acc.absent += r.absent;
-          acc.mp += r.mp;
-          return acc;
-        },
-        {
-          department: 'Stream Total',
-          appeared: 0,
-          cleared: 0,
-          backFail: 0,
-          absent: 0,
-          mp: 0,
-          successPercentage: 0,
+      const courses = deptStudents.map((s) =>
+        String(identity(s).course || '').trim().toUpperCase()
+      );
+      const isBca = courses.some((c) => c === 'BCA') || d.toUpperCase() === 'BCA';
+      const isBba = courses.some((c) => c === 'BBA') || d.toUpperCase() === 'BBA';
+      const isBa = courses.some((c) => c === 'BA' || c.includes('ARTS'));
+      const isBsc = courses.some(
+        (c) => c === 'BSC' || c.includes('SCIENCE')
+      );
+      const isBcom = courses.some(
+        (c) => c === 'BCOM' || c.includes('COMMERCE')
+      );
+
+      if (isBca) {
+        extraBca.push(d);
+      } else if (isBba) {
+        extraBba.push(d);
+      } else if (isBa) {
+        extraArts.push(d);
+      } else if (isBsc) {
+        extraScience.push(d);
+      } else if (isBcom) {
+        extraCommerce.push(d);
+      } else {
+        extraOther.push(d);
+      }
+    });
+
+    const streams = streamDefinitions
+      .map((stream) => {
+        let depts = stream.departments.filter((d) => presentDepts.includes(d));
+        if (stream.name === 'Arts' && extraArts.length > 0) {
+          depts = [...depts, ...extraArts];
+        } else if (stream.name === 'Science' && extraScience.length > 0) {
+          depts = [...depts, ...extraScience];
+        } else if (stream.name === 'Commerce' && extraCommerce.length > 0) {
+          depts = [...depts, ...extraCommerce];
+        } else if (stream.name === 'BCA' && extraBca.length > 0) {
+          depts = [...depts, ...extraBca];
+        } else if (stream.name === 'BBA' && extraBba.length > 0) {
+          depts = [...depts, ...extraBba];
         }
-      );
-      total.successPercentage =
-        total.appeared > 0 ? (total.cleared / total.appeared) * 100 : 0;
 
-      return {
-        name: stream.name,
-        departments: departmentStats,
-        total,
-      };
-    }).filter((s) => s.departments.length > 0);
+        const departmentStats = depts
+          .map(calculateDeptStats)
+          .filter((d) => d.appeared > 0);
 
-    const otherDepts = presentDepts.filter((d) => !knownDepts.has(d));
-    if (otherDepts.length > 0) {
-      const otherStats = otherDepts.map(calculateDeptStats);
+        const total = departmentStats.reduce(
+          (acc, r) => {
+            acc.appeared += r.appeared;
+            acc.cleared += r.cleared;
+            acc.backFail += r.backFail;
+            acc.absent += r.absent;
+            acc.mp += r.mp;
+            return acc;
+          },
+          {
+            department: 'Stream Total',
+            appeared: 0,
+            cleared: 0,
+            backFail: 0,
+            absent: 0,
+            mp: 0,
+            successPercentage: 0,
+          }
+        );
+        total.successPercentage =
+          total.appeared > 0 ? (total.cleared / total.appeared) * 100 : 0;
+
+        return {
+          name: stream.name,
+          departments: departmentStats,
+          total,
+        };
+      })
+      .filter((s) => s.departments.length > 0);
+
+    const otherStats = extraOther
+      .map(calculateDeptStats)
+      .filter((d) => d.appeared > 0);
+
+    if (otherStats.length > 0) {
       const otherTotal = otherStats.reduce(
         (acc, r) => {
           acc.appeared += r.appeared;
@@ -1064,15 +1371,15 @@ const reportResults = useMemo(() => {
             const sName = nameOf(student);
             const classification = getClassification(student);
             const deptName = deptGroup.department;
-            const fullTotal = subjects.reduce((sum, s, idx) => sum + getFullMark(deptName, idx, s), 0);
+            const fullTotal = subjects.reduce((sum, s, idx) => sum + getFullMark(deptName, s, idx), 0);
             const securedTotal = totalOf(student);
             const totalCredits = student.totalCredits ?? subjects.reduce((sum, s) => sum + (Number(s.credit) || 0), 0);
             const totalCP = subjects.reduce((sum, s) => sum + (Number(s.creditPoint) || 0), 0);
 
             return subjects.map((sub, subIdx) => {
-              const fullMark = getFullMark(deptName, subIdx, sub);
-              const midMark = getMidsemMark(student, sub, subIdx);
-              const finMark = getFinalMark(student, sub, subIdx);
+              const fullMark = getFullMark(deptName, sub, subIdx);
+              const midMark = getMidsemMark(sub, student, subIdx);
+              const finMark = getFinalMark(sub, student, subIdx);
               const isFail = ['F', 'AB', 'M'].includes(String(sub.grade || '').trim().toUpperCase());
               return [
                 sIdx + 1,
@@ -1194,15 +1501,15 @@ const reportResults = useMemo(() => {
             const sName = nameOf(student);
             const classification = getClassification(student);
             const deptName = deptGroup.department;
-            const fullTotal = subjects.reduce((sum, s, idx) => sum + getFullMark(deptName, idx, s), 0);
+            const fullTotal = subjects.reduce((sum, s, idx) => sum + getFullMark(deptName, s, idx), 0);
             const securedTotal = totalOf(student);
             const totalCredits = student.totalCredits ?? subjects.reduce((sum, s) => sum + (Number(s.credit) || 0), 0);
             const totalCP = subjects.reduce((sum, s) => sum + (Number(s.creditPoint) || 0), 0);
 
             return subjects.map((sub, subIdx) => {
-              const fullMark = getFullMark(deptName, subIdx, sub);
-              const midMark = getMidsemMark(student, sub, subIdx);
-              const finMark = getFinalMark(student, sub, subIdx);
+              const fullMark = getFullMark(deptName, sub, subIdx);
+              const midMark = getMidsemMark(sub, student, subIdx);
+              const finMark = getFinalMark(sub, student, subIdx);
               const isFail = ['F', 'AB', 'M'].includes(String(sub.grade || '').trim().toUpperCase());
               return [
                 sIdx + 1,
@@ -1280,9 +1587,9 @@ const reportResults = useMemo(() => {
     XLSX.writeFile(wb, `${revTag}${kind}-${selected.program}-sem${selected.semester}-batch${selected.batch || 'NA'}.xlsx`);
   };
 
-  const exportSingleGradeSheetPdf = (r: any) => {
+  const renderSingleGradeSheet = (doc: jsPDF, r: any, isFirst = true) => {
     if (!selected) return;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    if (!isFirst) doc.addPage();
     const isRev = r.isRevised === true;
     const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -1293,7 +1600,6 @@ const reportResults = useMemo(() => {
       console.warn('Could not add logo to PDF:', e);
     }
 
-    // Header Format: NIMAPARA AUTONOMOUS COLLEGE, NIMAPARA TABULATION REGISTER PG — 1ST SEMESTER EXAMINATION (2026) — 2025 ADMISSION BATCH
     const semNum = Number(selected.semester) || 1;
     const semSuffix = semNum === 1 ? '1ST' : semNum === 2 ? '2ND' : semNum === 3 ? '3RD' : `${semNum}TH`;
     const batchYear = selected.batch || '2025';
@@ -1305,7 +1611,7 @@ const reportResults = useMemo(() => {
     doc.text('NIMAPARA AUTONOMOUS COLLEGE, NIMAPARA', pageWidth / 2, 14, { align: 'center' });
 
     doc.setFontSize(11);
-    doc.text('TABULATION REGISTER', pageWidth / 2, 20, { align: 'center' });
+    doc.text('GRADE SHEET / STATEMENT OF MARKS', pageWidth / 2, 20, { align: 'center' });
 
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'normal');
@@ -1361,7 +1667,25 @@ const reportResults = useMemo(() => {
 
     doc.setFont('helvetica', 'normal');
     doc.text('Controller of Examinations', 196, finalY + 28, { align: 'right' });
-    doc.save(`GradeSheet-${rollOf(r)}${isRev ? '-REVISED' : ''}.pdf`);
+  };
+
+  const exportSingleGradeSheetPdf = (r: any) => {
+    if (!selected) return;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    renderSingleGradeSheet(doc, r, true);
+    doc.save(`GradeSheet-${rollOf(r)}${r.isRevised ? '-REVISED' : ''}.pdf`);
+  };
+
+  const exportGradeSheetsPdf = () => {
+    if (!selected || !reportResults.length) return;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    reportResults.forEach((r, idx) => {
+      renderSingleGradeSheet(doc, r, idx === 0);
+    });
+    const semNum = selected.semester || 1;
+    const batchYear = selected.batch || '2025';
+    const progName = String(selected.program || 'PG').toUpperCase();
+    doc.save(`GradeSheets-${progName}-Sem${semNum}-${batchYear}.pdf`);
   };
 
   const title = kind === 'grade-sheets' ? 'Grade Sheets' : kind === 'tabular-register' ? 'Tabular Register' : 'Result Statistics';
@@ -1455,55 +1779,31 @@ const reportResults = useMemo(() => {
             <button
               onClick={() => void load()}
               disabled={loading}
-              className="rounded-lg border px-4 py-2 text-sm font-semibold"
+              className="rounded-lg border px-4 py-2 text-sm font-semibold hover:bg-gray-50 flex items-center gap-1.5"
             >
               Refresh
             </button>
 
             <button
-              onClick={exportCsv}
-              disabled={!selected || loading}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => {
+                if (kind === 'tabular-register') {
+                  exportTabularRegisterPdf();
+                } else if (kind === 'statistics') {
+                  exportResultStatisticsPdf();
+                } else {
+                  exportGradeSheetsPdf();
+                }
+              }}
+              disabled={
+                !selected ||
+                loading ||
+                (kind === 'tabular-register' && rows.length === 0) ||
+                (kind === 'statistics' && !reportResults.length) ||
+                (kind === 'grade-sheets' && !reportResults.length)
+              }
+              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
             >
-              Export CSV
-            </button>
-
-            <button
-              onClick={exportExcel}
-              disabled={!selected || loading}
-              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              Export Excel (.xlsx)
-            </button>
-
-            {/* Download Result Statistics PDF */}
-            {kind === 'statistics' && (
-              <button
-                onClick={exportResultStatisticsPdf}
-            disabled={!selected || loading || !reportResults.length}
-                className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Download RS PDF
-              </button>
-            )}
-
-            {kind === 'tabular-register' && (
-              <button
-                onClick={exportTabularRegisterPdf}
-                disabled={!selected || loading || rows.length === 0}
-                className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Download TR PDF
-              </button>
-            )}
-
-          
-            <button
-              onClick={() => window.print()}
-              disabled={!selected}
-              className="rounded-lg border px-4 py-2 text-sm font-semibold"
-            >
-              Print / Save PDF
+              Download
             </button>
           </div>
         </div>
@@ -1808,7 +2108,7 @@ const reportResults = useMemo(() => {
                       const sName = nameOf(student);
                       const classification = getClassification(student);
                       const deptName = deptGroup.department;
-                      const fullTotal = subjects.reduce((sum, s, idx) => sum + getFullMark(deptName, idx, s), 0);
+                      const fullTotal = subjects.reduce((sum, s, idx) => sum + getFullMark(deptName, s, idx), 0);
                       const securedTotal = totalOf(student);
                       const totalCredits = student.totalCredits ?? subjects.reduce((sum, s) => sum + (Number(s.credit) || 0), 0);
                       const totalCP = subjects.reduce((sum, s) => sum + (Number(s.creditPoint) || 0), 0);
@@ -1861,9 +2161,9 @@ const reportResults = useMemo(() => {
                               </thead>
                               <tbody>
                                 {subjects.map((sub, subIdx) => {
-                                  const fullMark = getFullMark(deptName, subIdx, sub);
-                                  const midMark = getMidsemMark(student, sub, subIdx);
-                                  const finMark = getFinalMark(student, sub, subIdx);
+                                  const fullMark = getFullMark(deptName, sub, subIdx);
+                                  const midMark = getMidsemMark(sub, student, subIdx);
+                                  const finMark = getFinalMark(sub, student, subIdx);
                                   const gradeStr = String(sub.grade || '').trim().toUpperCase();
                                   const isFail = ['F', 'AB', 'M'].includes(gradeStr);
 

@@ -176,9 +176,19 @@ export function PublishView() {
         cache: 'no-store',
       });
 
+      if (!response.ok) {
+        const text = await response.text();
+        let errorMsg = `Unable to load saved calculations (${response.status})`;
+        try {
+          const j = JSON.parse(text);
+          if (j.error) errorMsg = j.error;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+
       const json = await response.json();
 
-      if (!response.ok || !json.success) {
+      if (!json.success) {
         throw new Error(
           json.error || 'Unable to load saved calculations.',
         );

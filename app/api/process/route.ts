@@ -96,13 +96,35 @@ function isValidStudent(
     student?.name ??
     student?.n;
 
-  return Boolean(
-    department &&
-      (
-        String(roll ?? '').trim() ||
-        String(name ?? '').trim()
-      ),
-  );
+  const deptStr = String(department ?? '').trim().toLowerCase();
+  const rollStr = String(roll ?? '').trim().toLowerCase();
+  const nameStr = String(name ?? '').trim().toLowerCase();
+
+  if (
+    !deptStr ||
+    deptStr === 'department' ||
+    deptStr === 'department name' ||
+    deptStr === 'dept'
+  ) {
+    return false;
+  }
+  if (
+    rollStr === 'roll no' ||
+    rollStr === 'roll no.' ||
+    rollStr === 'college roll no' ||
+    rollStr === 'autonomous roll no'
+  ) {
+    return false;
+  }
+  if (
+    nameStr === 'name of the students' ||
+    nameStr === 'student name' ||
+    nameStr === 'applicant name'
+  ) {
+    return false;
+  }
+
+  return Boolean(rollStr || nameStr);
 }
 
 // =====================================================
@@ -371,23 +393,31 @@ export async function POST(
        * Detect course automatically from Roll No.
        */
 
+      const isAutoCourse = !course || course === 'ALL' || course === 'AUTO';
+
+      const getRoll = (s: any) =>
+        s?.['Roll No'] ??
+        s?.['Roll No.'] ??
+        s?.rollNo ??
+        s?.collegeRollNo ??
+        s?.['College Roll No'] ??
+        s?.['College Roll No.'] ??
+        s?.autonomousRollNo ??
+        s?.['Autonomous Roll No'] ??
+        s?.['Autonomous Roll No.'] ??
+        s?.r;
+
       const validRows = students.filter((student) => {
-        const rollNo =
-          student?.['Roll No'] ??
-          student?.['Roll No.'] ??
-          student?.rollNo ??
-          student?.collegeRollNo ??
-          student?.autonomousRollNo ??
-          student?.r;
-
-        const c = student?.course || (course !== 'ALL' ? course : undefined);
+        const rollNo = getRoll(student);
+        const c = student?.course || (!isAutoCourse ? course : undefined);
         const b = student?.batch || batch;
+        const dept = student?.Department ?? student?.department ?? requestedDepartment;
 
-        const detected = detectUGCourse(rollNo, c, b);
+        const detected = detectUGCourse(rollNo, c, b, dept);
         if (!detected) return false;
 
-        // If a specific course was selected (not ALL), filter by course
-        if (course && course !== 'ALL' && detected.course !== course) {
+        // If a specific course was selected (not ALL and not AUTO), filter by course
+        if (!isAutoCourse && detected.course !== course) {
           return false;
         }
 
@@ -396,7 +426,7 @@ export async function POST(
 
       if (validRows.length === 0) {
         throw new Error(
-          course && course !== 'ALL'
+          !isAutoCourse
             ? `No valid UG students found for course "${course}".`
             : 'No valid UG students found. Could not detect course from Roll No.',
         );
@@ -411,19 +441,13 @@ export async function POST(
       for (
         const student of validRows
       ) {
-        const rollNo =
-          student?.['Roll No'] ??
-          student?.['Roll No.'] ??
-          student?.rollNo ??
-          student?.collegeRollNo ??
-          student?.autonomousRollNo ??
-          student?.r;
-
-        const c = student?.course || course;
+        const rollNo = getRoll(student);
+        const c = student?.course || (!isAutoCourse ? course : undefined);
         const b = student?.batch || batch;
+        const dept = student?.Department ?? student?.department ?? requestedDepartment;
 
         const detected =
-          detectUGCourse(rollNo, c, b);
+          detectUGCourse(rollNo, c, b, dept);
 
         if (!detected) {
           continue;
@@ -462,18 +486,14 @@ export async function POST(
         )
       ) {
         
-const firstRollNo =
-  groupStudents[0]?.['Roll No'] ??
-  groupStudents[0]?.['Roll No.'] ??
-  groupStudents[0]?.rollNo ??
-  groupStudents[0]?.collegeRollNo ??
-  groupStudents[0]?.autonomousRollNo ??
-  groupStudents[0]?.r;
+const firstRollNo = getRoll(groupStudents[0]);
+const firstDept = groupStudents[0]?.Department ?? groupStudents[0]?.department ?? requestedDepartment;
 
 const first = detectUGCourse(
   firstRollNo,
-  groupStudents[0]?.course || course,
-  groupStudents[0]?.batch || batch
+  groupStudents[0]?.course || (!isAutoCourse ? course : undefined),
+  groupStudents[0]?.batch || batch,
+  firstDept,
 );
 
         if (!first) {
@@ -554,12 +574,14 @@ const first = detectUGCourse(
         allResults.length -
         passed;
 
+      const savedCourse = !isAutoCourse ? course : 'AUTO';
+
       return saveCalculation({
         engine: {
           program: 'UG',
           semester,
           batch: batch || '2024',
-          course: course || 'ALL',
+          course: savedCourse,
           department: requestedDepartment || 'ALL',
           label:
             `UG Semester ${semester}`,
@@ -574,7 +596,7 @@ const first = detectUGCourse(
         program: 'UG',
         semester,
         batch: batch || '2024',
-        course: course || 'ALL',
+        course: savedCourse,
         department: requestedDepartment || 'ALL',
 
         departments:

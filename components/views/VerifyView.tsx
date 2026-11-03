@@ -142,8 +142,10 @@ function getAutonomousRoll(row: any, student: any): string {
       student?.['Autonomous Roll No'],
       student?.['Autonomous Roll No.'],
       student?.['Autonomous Roll Number'],
+      student?.r,
       row?.autonomousRollNo,
       row?.autonomousRoll,
+      row?.r,
     ),
   );
 }
@@ -165,7 +167,10 @@ function getDepartment(
       student?.deptName,
       student?.['Department'],
       student?.['Department Name'],
+      row?.course,
+      student?.course,
       calculation.department,
+      calculation.course,
     ),
   );
 }
@@ -266,9 +271,19 @@ export function VerifyView() {
         cache: 'no-store',
       });
 
+      if (!response.ok) {
+        const text = await response.text();
+        let errorMsg = `Could not load calculations (${response.status})`;
+        try {
+          const j = JSON.parse(text);
+          if (j.error) errorMsg = j.error;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+
       const json = await response.json();
 
-      if (!response.ok || !json.success) {
+      if (!json.success) {
         throw new Error(json.error || 'Could not load calculations.');
       }
 

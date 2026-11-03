@@ -128,10 +128,30 @@ export function StudentResultsView() {
         fetch('/api/result-corrections', { cache: 'no-store' }),
       ]);
 
+      if (!response.ok) {
+        const text = await response.text();
+        let errorMsg = `Unable to load saved results (${response.status})`;
+        try {
+          const j = JSON.parse(text);
+          if (j.error) errorMsg = j.error;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+
+      if (!correctionsResponse.ok) {
+        const text = await correctionsResponse.text();
+        let errorMsg = `Unable to load result corrections (${correctionsResponse.status})`;
+        try {
+          const j = JSON.parse(text);
+          if (j.error) errorMsg = j.error;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+
       const json = await response.json();
       const correctionsJson = await correctionsResponse.json();
 
-      if (!response.ok || !json.success) {
+      if (!json.success) {
         throw new Error(json.error || 'Unable to load saved results.');
       }
 

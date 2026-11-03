@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const ALLOWED_STATUSES = [
   'calculated',
   'verified',
@@ -9,7 +11,7 @@ const ALLOWED_STATUSES = [
   'rejected',
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db: any = getDB();
 

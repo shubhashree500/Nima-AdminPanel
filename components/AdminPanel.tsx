@@ -10,6 +10,9 @@ import { MarksView } from './views/MarksView';
 import { StudentResultsView } from './views/StudentResultsView';
 import { SetupView } from './views/SetupView';
 import { ExamSessionsView } from './views/ExamSessionsView';
+import { GradeSheetsView } from './views/GradeSheetsView';
+import { TabularRegisterView } from './views/TabularRegisterView';
+import { ResultStatisticsView } from './views/ResultStatisticsView';
 import { ReportsView } from './views/ReportsView';
 import { RecheckingView } from './views/RecheckingView';
 import { ResultProcessingView } from './views/ResultProcessingView';
@@ -561,15 +564,15 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
         )}
 
         {page === 'grade-sheets' && (
-          <ReportsView kind="grade-sheets" />
+          <GradeSheetsView />
         )}
 
         {page === 'tabular-register' && (
-          <ReportsView kind="tabular-register" />
+          <TabularRegisterView />
         )}
 
         {page === 'statistics' && (
-          <ReportsView kind="statistics" />
+          <ResultStatisticsView />
         )}
 
         {page === 'rechecking' && <RecheckingView />}

@@ -2,6 +2,7 @@ import type { CourseConfig, Program } from './types';
 
 // UG
 import ugBbaSem1 from './ug/bba/sem1';
+import ugSem1 from './ug/sem1';
 import ugSem3 from './ug/sem3';
 
 // PG
@@ -15,6 +16,7 @@ import pgMfcSem1 from './pg/mfc/sem1';
 const configs: CourseConfig[] = [
   // UG
   ugBbaSem1,
+  ugSem1,
   ugSem3,
 
   // PG

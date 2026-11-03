@@ -48,7 +48,14 @@ export type StudentResult = {
   totalCredits: number;
   totalCreditPoints: number;
   sgpa: number;
- percentage?: number;
+  percentage?: number;
+  totalMarks?: number;
+  grandTotal?: number;
+  totalFullMarks?: number;
+  isPassed?: boolean;
+  passed?: boolean;
+  resultStatus?: string;
+  status?: string;
   usedGrace?: number;
   remainingGrace?: number;
 };

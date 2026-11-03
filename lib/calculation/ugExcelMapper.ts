@@ -53,6 +53,7 @@ export function detectUGCourse(
   rollNo: unknown,
   explicitCourse?: string,
   explicitBatch?: string | number,
+  department?: string,
 ): UGDetectedInfo | null {
   const c = String(explicitCourse ?? '').trim().toUpperCase();
   const b = Number(explicitBatch) || 2024;
@@ -64,29 +65,91 @@ export function detectUGCourse(
     .trim()
     .toUpperCase();
 
-  if (!roll) {
-    return null;
+  // Try extracting 2-digit batch year from roll (e.g. BA24-001 -> 2024, 01NAC25001 -> 2025)
+  let detectedBatch = b;
+  const yearMatch = roll.match(/(?:BA|BS|BC|BCA|BBA|NAC|UG)[_-]?(\d{2})/i) || roll.match(/(\d{2})NAC/i);
+  if (yearMatch && yearMatch[1]) {
+    const yr = Number(yearMatch[1]);
+    if (yr >= 20 && yr <= 35) {
+      detectedBatch = 2000 + yr;
+    }
   }
 
-  // Check longer prefixes first.
-  if (roll.startsWith('BCA')) {
-    return { course: 'BCA', batch: roll.includes('25') ? 2025 : 2024 };
+  if (roll) {
+    // Check longer prefixes first.
+    if (roll.startsWith('BCA')) {
+      return { course: 'BCA', batch: detectedBatch };
+    }
+
+    if (roll.startsWith('BBA')) {
+      return { course: 'BBA', batch: detectedBatch };
+    }
+
+    if (roll.startsWith('BA')) {
+      return { course: 'BA', batch: detectedBatch };
+    }
+
+    if (roll.startsWith('BS') || roll.startsWith('BSC')) {
+      return { course: 'BSC', batch: detectedBatch };
+    }
+
+    if (roll.startsWith('BC') || roll.startsWith('BCOM')) {
+      return { course: 'BCOM', batch: detectedBatch };
+    }
+
+    // Check embedded course tokens (e.g. NAC-BA-24-001 or 24BA001)
+    if (/\bBCA\b|BCA\d/i.test(roll)) return { course: 'BCA', batch: detectedBatch };
+    if (/\bBBA\b|BBA\d/i.test(roll)) return { course: 'BBA', batch: detectedBatch };
+    if (/\bBSC\b|BSC\d/i.test(roll)) return { course: 'BSC', batch: detectedBatch };
+    if (/\bBCOM\b|BCOM\d/i.test(roll)) return { course: 'BCOM', batch: detectedBatch };
+    if (/\bBA\b|BA\d/i.test(roll)) return { course: 'BA', batch: detectedBatch };
   }
 
-  if (roll.startsWith('BBA')) {
-    return { course: 'BBA', batch: roll.includes('25') ? 2025 : 2024 };
+  // Fallback: Infer course from Department name
+  const dept = String(department ?? '').trim().toLowerCase();
+  if (dept && dept !== 'all' && dept !== 'auto') {
+    if (dept.includes('bba') || dept.includes('business')) {
+      return { course: 'BBA', batch: detectedBatch };
+    }
+    if (dept.includes('bca') || dept.includes('computer application')) {
+      return { course: 'BCA', batch: detectedBatch };
+    }
+    if (dept.includes('commerce') || dept.includes('com') || dept.includes('accounting') || dept.includes('finance')) {
+      return { course: 'BCOM', batch: detectedBatch };
+    }
+    if (
+      dept.includes('botany') ||
+      dept.includes('chem') ||
+      dept.includes('phys') ||
+      dept.includes('math') ||
+      dept.includes('geo') ||
+      dept.includes('zool') ||
+      dept.includes('science') ||
+      dept.includes('comp')
+    ) {
+      return { course: 'BSC', batch: detectedBatch };
+    }
+    if (
+      dept.includes('odia') ||
+      dept.includes('hist') ||
+      dept.includes('pol') ||
+      dept.includes('econ') ||
+      dept.includes('edu') ||
+      dept.includes('eng') ||
+      dept.includes('sans') ||
+      dept.includes('hindi') ||
+      dept.includes('phil') ||
+      dept.includes('psych') ||
+      dept.includes('soci') ||
+      dept.includes('arts')
+    ) {
+      return { course: 'BA', batch: detectedBatch };
+    }
   }
 
-  if (roll.startsWith('BA')) {
-    return { course: 'BA', batch: roll.includes('25') ? 2025 : 2024 };
-  }
-
-  if (roll.startsWith('BS') || roll.startsWith('BSC')) {
-    return { course: 'BSC', batch: roll.includes('25') ? 2025 : 2024 };
-  }
-
-  if (roll.startsWith('BC') || roll.startsWith('BCOM')) {
-    return { course: 'BCOM', batch: roll.includes('25') ? 2025 : 2024 };
+  // If roll exists or is in UG context, default to BSC instead of failing
+  if (roll.length > 0 || (c === 'AUTO' || c === 'ALL' || !c)) {
+    return { course: 'BSC', batch: detectedBatch };
   }
 
   return null;
@@ -208,9 +271,23 @@ export function mapUGExcelStudent(
     'Roll No',
     'Roll No.',
     'rollNo',
+    'College Roll No',
+    'College Roll No.',
+    'collegeRollNo',
+    'Autonomous Roll No',
+    'Autonomous Roll No.',
+    'autonomousRollNo',
+    'r',
   ]);
 
-  const detected = detectUGCourse(rollNo, row?.course, row?.batch);
+  const department = getValue(row, [
+    'Department',
+    'department',
+    'Department Name',
+    'department name',
+  ]);
+
+  const detected = detectUGCourse(rollNo, row?.course, row?.batch, department);
 
   if (!detected) {
     throw new Error(
@@ -218,31 +295,52 @@ export function mapUGExcelStudent(
     );
   }
 
-  const department = getValue(row, [
-    'Department',
-    'department',
+  const autonomousRollNo = getValue(row, [
+    'Autonomous Roll No',
+    'Autonomous Roll No.',
+    'autonomousRollNo',
+    'r',
+  ]);
+
+  const collegeRollNo = getValue(row, [
+    'College Roll No',
+    'College Roll No.',
+    'collegeRollNo',
+    'Roll No',
+    'Roll No.',
+    'rollNo',
+  ]);
+
+  const studentName = getValue(row, [
+    'Name of the Students',
+    'Student Name',
+    'Name',
+    'Applicant Name',
+    'name',
+    'studentName',
   ]);
 
   const student = {
     'Roll No': rollNo,
+    rollNo,
+    'College Roll No': collegeRollNo,
+    collegeRollNo,
 
-    'Autonomous Roll No': getValue(row, [
-      'Autonomous Roll No',
-      'Autonomous Roll No.',
-    ]),
+    'Autonomous Roll No': autonomousRollNo,
+    autonomousRollNo,
 
     Examcode: getValue(row, [
       'Examcode',
       'Exam Code',
+      'examcode',
+      'examCode',
     ]),
 
-    'Name of the Students': getValue(row, [
-      'Name of the Students',
-      'Student Name',
-      'Name',
-    ]),
+    'Name of the Students': studentName,
+    name: studentName,
 
     Department: department,
+    department: department,
 
     course: detected.course,
     batch: detected.batch,
