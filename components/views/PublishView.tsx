@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 type Calculation = {
   id: string;
@@ -252,7 +253,7 @@ export function PublishView() {
   );
 
   const stats = useMemo(() => {
-    const results = selected?.results || [];
+    const results = (selected?.results || []).filter(isValidStudentRecord);
 
     const failed = results.filter(isFail).length;
 
@@ -276,14 +277,18 @@ export function PublishView() {
     };
   }, [selected]);
 
+  const allValidResults = useMemo(() => {
+    return (selected?.results || []).filter(isValidStudentRecord);
+  }, [selected]);
+
   const totalPages = Math.max(
     1,
-    Math.ceil((selected?.results?.length || 0) / PAGE_SIZE),
+    Math.ceil(allValidResults.length / PAGE_SIZE),
   );
 
   const startIndex = (currentPage - 1) * PAGE_SIZE;
 
-  const pageResults = (selected?.results || []).slice(
+  const pageResults = allValidResults.slice(
     startIndex,
     startIndex + PAGE_SIZE,
   );

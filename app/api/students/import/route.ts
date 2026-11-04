@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
 import { Student, ProgramKey, PROG } from '@/types';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
     let updatedCount = 0;
 
     students.forEach((raw) => {
+      if (!isValidStudentRecord(raw)) {
+        return;
+      }
       const autoRoll = String(raw.autonomousRollNo ?? raw.r ?? '').trim();
       const collegeRoll = String(raw.collegeRollNo ?? '').trim();
       const name = String(raw.name ?? raw.n ?? '').trim();

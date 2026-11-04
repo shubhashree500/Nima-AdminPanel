@@ -7,6 +7,7 @@ import {
   findStudent,
   formatPct,
 } from '@/lib/calculations';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 interface OverviewViewProps {
   db: DBData;
@@ -79,6 +80,7 @@ export function OverviewView({ db, onDeleteCalculation }: OverviewViewProps) {
 
     // 1. Add students from Student Registry
     (db.students || []).forEach((s) => {
+      if (!isValidStudentRecord(s)) return;
       const autoRoll = String(s.autonomousRollNo || s.r || '').trim();
       const colRoll = String(s.collegeRollNo || '').trim();
       const key = (autoRoll || colRoll || s.name || s.n).toUpperCase();
@@ -102,6 +104,7 @@ export function OverviewView({ db, onDeleteCalculation }: OverviewViewProps) {
     (db.calculatedResults || []).forEach((calc) => {
       const results = Array.isArray(calc.results) ? calc.results : [];
       results.forEach((r) => {
+        if (!isValidStudentRecord(r)) return;
         const s = r.student || r;
         const autoRoll = String(
           s['Autonomous Roll No'] ??
@@ -125,7 +128,7 @@ export function OverviewView({ db, onDeleteCalculation }: OverviewViewProps) {
           s.name ??
           s.n ??
           ''
-        ).trim() || 'Student';
+        ).trim();
 
         const key = (autoRoll || colRoll || name).toUpperCase();
         if (!key) return;
@@ -228,7 +231,7 @@ export function OverviewView({ db, onDeleteCalculation }: OverviewViewProps) {
     if (saved.length) {
       const all = saved.flatMap(
         (record: any) =>
-          Array.isArray(record.results) ? record.results : []
+          Array.isArray(record.results) ? record.results.filter(isValidStudentRecord) : []
       );
 
       const passed = all.filter(
@@ -251,7 +254,7 @@ export function OverviewView({ db, onDeleteCalculation }: OverviewViewProps) {
         const record: any = latestByProgram[program];
 
         const results = Array.isArray(record?.results)
-          ? record.results
+          ? record.results.filter(isValidStudentRecord)
           : [];
 
         const p = results.filter(

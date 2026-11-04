@@ -1,3 +1,5 @@
+import { isValidStudentRecord } from '@/lib/studentValidation';
+
 type UGCourse =
   | 'BA'
   | 'BSC'
@@ -55,15 +57,31 @@ export function detectUGCourse(
   explicitBatch?: string | number,
   department?: string,
 ): UGDetectedInfo | null {
+  const roll = String(rollNo ?? '')
+    .trim()
+    .toUpperCase();
+
+  const isInvalidRoll =
+    !roll ||
+    roll === '-' ||
+    roll === '—' ||
+    roll === 'ROLL NO' ||
+    roll === 'ROLL NO.' ||
+    roll === 'ROLL NUMBER' ||
+    roll === 'AUTONOMOUS ROLL NO' ||
+    roll === 'AUTONOMOUS ROLL NO.' ||
+    roll === 'COLLEGE ROLL NO' ||
+    roll === 'COLLEGE ROLL NO.';
+
+  if (isInvalidRoll) {
+    return null;
+  }
+
   const c = String(explicitCourse ?? '').trim().toUpperCase();
   const b = Number(explicitBatch) || 2024;
   if (c === 'BCA' || c === 'BBA' || c === 'BA' || c === 'BSC' || c === 'BCOM') {
     return { course: c as UGCourse, batch: b };
   }
-
-  const roll = String(rollNo ?? '')
-    .trim()
-    .toUpperCase();
 
   // Try extracting 2-digit batch year from roll (e.g. BA24-001 -> 2024, 01NAC25001 -> 2025)
   let detectedBatch = b;
@@ -147,8 +165,8 @@ export function detectUGCourse(
     }
   }
 
-  // If roll exists or is in UG context, default to BSC instead of failing
-  if (roll.length > 0 || (c === 'AUTO' || c === 'ALL' || !c)) {
+  // If roll exists, default to BSC instead of failing
+  if (roll.length > 0) {
     return { course: 'BSC', batch: detectedBatch };
   }
 
@@ -267,6 +285,9 @@ function createSubject(
 export function mapUGExcelStudent(
   row: any,
 ) {
+  if (!isValidStudentRecord(row)) {
+    throw new Error('Blank or invalid student row');
+  }
   const rollNo = getValue(row, [
     'Roll No',
     'Roll No.',

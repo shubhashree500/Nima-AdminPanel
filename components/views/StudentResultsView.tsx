@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 type Calculation = {
   id: string;
@@ -190,7 +191,7 @@ export function StudentResultsView() {
   const selected = records.find((record) => record.id === selectedId);
 
   const displayResults = useMemo(() => {
-    const originalResults = selected?.results || [];
+    const originalResults = (selected?.results || []).filter(isValidStudentRecord);
     if (!selected) return [];
 
     const latestByRoll = new Map<string, any>();

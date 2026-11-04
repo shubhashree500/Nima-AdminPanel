@@ -3,6 +3,7 @@
 import React, { useMemo, useState, ChangeEvent } from 'react';
 import { DBData, Student, PROG, ProgramKey } from '@/types';
 import { parseCSV, readSpreadsheetFile } from '@/lib/csv';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 interface StudentsViewProps {
   db: DBData;
@@ -540,6 +541,15 @@ export function StudentsView({
         stream: streamVal || 'General',
       };
 
+      // If completely blank row, silently skip
+      if (!autoRoll && !colRoll && !sName) {
+        return;
+      }
+
+      if (!isValidStudentRecord({ ...fields, name: sName, autonomousRollNo: autoRoll, collegeRollNo: colRoll })) {
+        return;
+      }
+
       const line = `Row ${index + (headerLooksValid ? 2 : 1)}:`;
 
       if (!fields.name || (!fields.autonomousRollNo && !fields.collegeRollNo)) {
@@ -602,7 +612,7 @@ export function StudentsView({
   const filteredStudents = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
-    return db.students.filter((student) => {
+    return db.students.filter(isValidStudentRecord).filter((student) => {
       const record = student as Student & Record<string, any>;
       const programme = getStudentValue(record, 'programme').toUpperCase();
       const values = (

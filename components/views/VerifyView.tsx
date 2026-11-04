@@ -2,6 +2,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 type Calculation = {
   id: string;
@@ -342,7 +343,7 @@ export function VerifyView() {
     status !== 'published';
 
   const studentResults = Array.isArray(selected?.results)
-    ? selected.results
+    ? selected.results.filter(isValidStudentRecord)
     : [];
 
   const totalPages = Math.max(

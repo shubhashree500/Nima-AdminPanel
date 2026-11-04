@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { COLLEGE_LOGO } from '@/lib/logo';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 type ReportKind = 'grade-sheets' | 'tabular-register' | 'statistics';
 type Calculation = { id: string; program: string; semester: number; batch?: string | number; course?: string; department?: string; count?: number; status?: string; createdAt?: string; results?: any[]; hasRevisions?: boolean; departments?: any[] };
@@ -382,6 +383,7 @@ const load = useCallback(async () => {
   
 const reportResults = useMemo(() => {
   const originalResults = (selected?.results || []).filter((r: any) => {
+    if (!isValidStudentRecord(r)) return false;
     const s = identity(r);
     const roll = String(s['College Roll No'] || s['College Roll No.'] || s['Roll No'] || s['College Roll'] || s.collegeRollNo || s.roll || s.rollNo || s['Autonomous Roll No'] || s.autonomousRollNo || '').trim().toLowerCase();
     const name = String(s['Applicant Name'] || s['Name of the Students'] || s['Student Name'] || s.name || s.studentName || '').trim().toLowerCase();
@@ -1097,7 +1099,7 @@ const reportResults = useMemo(() => {
         .replace(/[^a-z0-9_-]+/gi, '-')
         .replace(/^-+|-+$/g, '');
 
-    doc.save(`PG_Tabulation_Register-${safe(selected.program)}-Sem${selected.semester}-Batch${safe(selected.batch || 'NA')}.pdf`);
+    doc.save(`${progName}_Tabulation_Register-Sem${selected.semester}-Batch${safe(selected.batch || 'NA')}.pdf`);
   };
 
   const exportResultStatisticsPdf = () => {
@@ -1325,7 +1327,7 @@ const reportResults = useMemo(() => {
         .replace(/[^a-z0-9_-]+/gi, '-')
         .replace(/^-+|-+$/g, '');
 
-    doc.save(`PG_Result_Statistics-${safe(selected.program)}-Sem${selected.semester}-Batch${safe(selected.batch || 'NA')}.pdf`);
+    doc.save(`${progName}_Result_Statistics-Sem${selected.semester}-Batch${safe(selected.batch || 'NA')}.pdf`);
   };
 
   const exportCsv = () => {

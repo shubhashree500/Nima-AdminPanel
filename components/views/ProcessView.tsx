@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import * as XLSX from 'xlsx';
 import { ProgramKey, PROG, DBData, Student } from '@/types';
+import { isValidStudentRecord } from '@/lib/studentValidation';
 
 interface ProcessViewProps {
   db?: DBData;
@@ -562,15 +563,17 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
         blankrows: false,
       }) as any[];
 
-      if (!rows.length) {
-        throw new Error('The selected Excel sheet is empty.');
+      const validRows = rows.filter(isValidStudentRecord);
+
+      if (!validRows.length) {
+        throw new Error('No valid student rows found in the selected Excel sheet.');
       }
 
-      setExcelRows(rows);
+      setExcelRows(validRows);
       setFileName(file.name);
 
       setMessage({
-        text: `Loaded ${rows.length} row(s) from "${file.name}". Click "Calculate Results" below to process.`,
+        text: `Loaded ${validRows.length} valid student row(s) from "${file.name}". Click "Calculate Results" below to process.`,
         type: 'ok',
       });
     } catch (err: any) {
@@ -586,12 +589,13 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
   const handleLoadJsonPaste = () => {
     try {
       const parsed = JSON.parse(jsonPasteText);
-      const rows = Array.isArray(parsed) ? parsed : [parsed];
-      if (!rows.length) throw new Error('JSON array is empty.');
+      const rawRows = Array.isArray(parsed) ? parsed : [parsed];
+      const rows = rawRows.filter(isValidStudentRecord);
+      if (!rows.length) throw new Error('No valid student records found in JSON.');
       setExcelRows(rows);
       setFileName('pasted-data.json');
       setMessage({
-        text: `Successfully parsed ${rows.length} student record(s) from JSON. Ready to calculate.`,
+        text: `Successfully parsed ${rows.length} valid student record(s) from JSON. Ready to calculate.`,
         type: 'ok',
       });
     } catch (err: any) {
@@ -626,7 +630,7 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
           batch,
           course: course === 'ALL' ? 'AUTO' : course,
           department: department === 'ALL' ? 'AUTO' : department,
-          students: excelRows,
+          students: excelRows.filter(isValidStudentRecord),
         }),
       });
 

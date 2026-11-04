@@ -18,6 +18,8 @@ import {
   mapUGExcelStudent,
 } from '@/lib/calculation/ugExcelMapper';
 
+import { isValidStudentRecord } from '@/lib/studentValidation';
+
 // =====================================================
 // PG DEPARTMENT
 // =====================================================
@@ -73,6 +75,10 @@ function getDepartment(
 function isValidStudent(
   student: any,
 ): boolean {
+  if (!isValidStudentRecord(student)) {
+    return false;
+  }
+
   const department =
     getDepartment(student);
 
@@ -248,9 +254,10 @@ function saveCalculation({
       }
     }
 
-    existingRecord.results = existingList;
-    existingRecord.count = existingList.length;
-    existingRecord.passed = calculatePassCount(existingList);
+    const cleanExisting = existingList.filter(isValidStudentRecord);
+    existingRecord.results = cleanExisting;
+    existingRecord.count = cleanExisting.length;
+    existingRecord.passed = calculatePassCount(cleanExisting);
     existingRecord.failed = existingRecord.count - existingRecord.passed;
     existingRecord.updatedAt = now;
 
@@ -272,6 +279,10 @@ function saveCalculation({
     });
   }
 
+  const cleanResults = results.filter(isValidStudentRecord);
+  const cleanPassed = calculatePassCount(cleanResults);
+  const cleanFailed = cleanResults.length - cleanPassed;
+
   const calculationRecord = {
     id: `CALC-${Date.now()}`,
     status: 'calculated',
@@ -285,14 +296,14 @@ function saveCalculation({
 
     engine,
 
-    count: results.length,
-    passed,
-    failed,
+    count: cleanResults.length,
+    passed: cleanPassed,
+    failed: cleanFailed,
 
     departments:
       departments || [],
 
-    results,
+    results: cleanResults,
   };
 
   db.calculatedResults.push(
@@ -408,6 +419,7 @@ export async function POST(
         s?.r;
 
       const validRows = students.filter((student) => {
+        if (!isValidStudentRecord(student)) return false;
         const rollNo = getRoll(student);
         const c = student?.course || (!isAutoCourse ? course : undefined);
         const b = student?.batch || batch;
