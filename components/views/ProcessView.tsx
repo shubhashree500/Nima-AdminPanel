@@ -9,6 +9,7 @@ import React, {
 import * as XLSX from 'xlsx';
 import { ProgramKey, PROG, DBData, Student } from '@/types';
 import { isValidStudentRecord } from '@/lib/studentValidation';
+import { isSubjectAbsent, isAbsentMark, formatMarkDisplay } from '@/lib/calculation/absence';
 
 interface ProcessViewProps {
   db?: DBData;
@@ -417,7 +418,8 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
         semester: Number(semester) || 1,
         courses: paperMarks.map((p) => {
           if (p.isPrac) {
-            const practicalMark = p.practical !== '' ? Number(p.practical) : (p.final !== '' ? Number(p.final) : 0);
+            const isPracAbsent = isAbsentMark(p.practical) || isAbsentMark(p.final);
+            const practicalMark = isPracAbsent ? 'A' : (p.practical !== '' ? Number(p.practical) : (p.final !== '' ? Number(p.final) : 0));
             return {
               paper: p.code,
               code: p.code,
@@ -425,15 +427,21 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
               practical: practicalMark,
               practicalMark,
               finalMark: practicalMark,
+              isAbsent: isPracAbsent,
+              status: isPracAbsent ? 'ABSENT' : 'PRESENT',
             };
           }
+          const isFinalAbsent = isAbsentMark(p.final);
+          const isMidAbsent = isAbsentMark(p.midsem);
           return {
             paper: p.code,
             code: p.code,
             title: p.title,
-            midsemMark: p.midsem !== '' ? Number(p.midsem) : undefined,
-            finalMark: Number(p.final || 0),
-            endsem: Number(p.final || 0),
+            midsemMark: isMidAbsent ? 'A' : (p.midsem !== '' ? Number(p.midsem) : undefined),
+            finalMark: isFinalAbsent ? 'A' : Number(p.final || 0),
+            endsem: isFinalAbsent ? 'A' : Number(p.final || 0),
+            isAbsent: isFinalAbsent || isMidAbsent,
+            status: (isFinalAbsent || isMidAbsent) ? 'ABSENT' : 'PRESENT',
           };
         }),
       };
@@ -441,12 +449,13 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
       // Add flat Excel format keys as backup
       paperMarks.forEach((p) => {
         if (p.isPrac) {
-          const pVal = p.practical !== '' ? Number(p.practical) : Number(p.final || 0);
+          const isPracAbs = isAbsentMark(p.practical) || isAbsentMark(p.final);
+          const pVal = isPracAbs ? 'A' : (p.practical !== '' ? Number(p.practical) : Number(p.final || 0));
           studentObj[`PAPER-${p.code}-END`] = pVal;
           studentObj[`PAPER-${p.code}-PRAC`] = pVal;
         } else {
-          if (p.midsem !== '') studentObj[`PAPER-${p.code}-MID`] = Number(p.midsem);
-          if (p.final !== '') studentObj[`PAPER-${p.code}-END`] = Number(p.final);
+          if (p.midsem !== '') studentObj[`PAPER-${p.code}-MID`] = isAbsentMark(p.midsem) ? 'A' : Number(p.midsem);
+          if (p.final !== '') studentObj[`PAPER-${p.code}-END`] = isAbsentMark(p.final) ? 'A' : Number(p.final);
         }
       });
     } else {
@@ -454,18 +463,25 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
       const subjectsMap: Record<string, any> = {};
 
       paperMarks.forEach((p) => {
+        const isMidAbs = isAbsentMark(p.midsem);
+        const isPracAbs = isAbsentMark(p.practical);
+        const isFinalAbs = isAbsentMark(p.final);
+        const isPaperAbs = isFinalAbs || isMidAbs || isPracAbs;
+
         subjectsMap[p.code] = {
           code: p.code,
           paperCode: p.code,
           subject: p.title || p.code,
-          MidsemMark: p.midsem !== '' ? Number(p.midsem) : '',
-          PracticalMark: p.practical !== '' ? Number(p.practical) : '',
+          MidsemMark: isMidAbs ? 'A' : (p.midsem !== '' ? Number(p.midsem) : ''),
+          PracticalMark: isPracAbs ? 'A' : (p.practical !== '' ? Number(p.practical) : ''),
           'I-Practical': '',
           Attandance: '5',
           SurpriseTest: '5',
           Assignment: '5',
-          FinalMark: p.final !== '' ? Number(p.final) : 0,
+          FinalMark: isFinalAbs ? 'A' : (p.final !== '' ? Number(p.final) : 0),
           isPractical: Boolean(p.isPrac),
+          isAbsent: isPaperAbs,
+          status: isPaperAbs ? 'ABSENT' : 'PRESENT',
         };
       });
 
@@ -572,8 +588,42 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
       setExcelRows(validRows);
       setFileName(file.name);
 
+      // Auto-detect exam scope (e.g. PG Semester 1 Odia)
+      const sample = validRows[0];
+      const sampleKeys = sample && typeof sample === 'object' ? Object.keys(sample) : [];
+      const hasPgPapers = sampleKeys.some((k) => /^paper\s*[-:]?\s*1\.\d+/i.test(k.trim()));
+      const rawDept = String(sample.Department || sample.department || '').trim();
+      const rawRoll = String(sample['Autonomous Roll No'] || sample.autonomousRollNo || sample['College Roll No'] || sample.collegeRollNo || sample.r || sample.__EMPTY || '').trim().toUpperCase();
+      const isPgRoll = /^(ODIA|CHEM|MATH|COMM|GEOL|MFC)\d{2}-/i.test(rawRoll) || /^\d{3}NAC\d{2}/i.test(rawRoll);
+
+      let detectedMsg = '';
+      if (hasPgPapers || isPgRoll) {
+        setProgram('PG');
+        setSemester(1);
+        const yrMatch = rawRoll.match(/(?:ODIA|CHEM|MATH|COMM|GEOL|MFC|NAC)(\d{2})/i);
+        if (yrMatch && yrMatch[1]) {
+          setBatch(String(2000 + Number(yrMatch[1])));
+        }
+        let detectedDept = 'Odia';
+        if (rawDept && PG_DEPARTMENTS.includes(rawDept)) {
+          detectedDept = rawDept;
+        } else if (/^CHEM/i.test(rawRoll)) {
+          detectedDept = 'Chemistry';
+        } else if (/^MATH/i.test(rawRoll)) {
+          detectedDept = 'Mathematics';
+        } else if (/^COMM/i.test(rawRoll)) {
+          detectedDept = 'Commerce';
+        } else if (/^GEOL/i.test(rawRoll)) {
+          detectedDept = 'Geology';
+        } else if (/^MFC/i.test(rawRoll)) {
+          detectedDept = 'MFC';
+        }
+        setDepartment(detectedDept);
+        detectedMsg = ` (Auto-detected PG Semester 1, ${detectedDept})`;
+      }
+
       setMessage({
-        text: `Loaded ${validRows.length} valid student row(s) from "${file.name}". Click "Calculate Results" below to process.`,
+        text: `Loaded ${validRows.length} valid student row(s) from "${file.name}"${detectedMsg}. Click "Calculate Results" below to process.`,
         type: 'ok',
       });
     } catch (err: any) {
@@ -594,8 +644,42 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
       if (!rows.length) throw new Error('No valid student records found in JSON.');
       setExcelRows(rows);
       setFileName('pasted-data.json');
+
+      const sample = rows[0];
+      const sampleKeys = sample && typeof sample === 'object' ? Object.keys(sample) : [];
+      const hasPgPapers = sampleKeys.some((k) => /^paper\s*[-:]?\s*1\.\d+/i.test(k.trim()));
+      const rawDept = String(sample.Department || sample.department || '').trim();
+      const rawRoll = String(sample['Autonomous Roll No'] || sample.autonomousRollNo || sample['College Roll No'] || sample.collegeRollNo || sample.r || sample.__EMPTY || '').trim().toUpperCase();
+      const isPgRoll = /^(ODIA|CHEM|MATH|COMM|GEOL|MFC)\d{2}-/i.test(rawRoll) || /^\d{3}NAC\d{2}/i.test(rawRoll);
+
+      let detectedMsg = '';
+      if (hasPgPapers || isPgRoll) {
+        setProgram('PG');
+        setSemester(1);
+        const yrMatch = rawRoll.match(/(?:ODIA|CHEM|MATH|COMM|GEOL|MFC|NAC)(\d{2})/i);
+        if (yrMatch && yrMatch[1]) {
+          setBatch(String(2000 + Number(yrMatch[1])));
+        }
+        let detectedDept = 'Odia';
+        if (rawDept && PG_DEPARTMENTS.includes(rawDept)) {
+          detectedDept = rawDept;
+        } else if (/^CHEM/i.test(rawRoll)) {
+          detectedDept = 'Chemistry';
+        } else if (/^MATH/i.test(rawRoll)) {
+          detectedDept = 'Mathematics';
+        } else if (/^COMM/i.test(rawRoll)) {
+          detectedDept = 'Commerce';
+        } else if (/^GEOL/i.test(rawRoll)) {
+          detectedDept = 'Geology';
+        } else if (/^MFC/i.test(rawRoll)) {
+          detectedDept = 'MFC';
+        }
+        setDepartment(detectedDept);
+        detectedMsg = ` (Auto-detected PG Semester 1, ${detectedDept})`;
+      }
+
       setMessage({
-        text: `Successfully parsed ${rows.length} valid student record(s) from JSON. Ready to calculate.`,
+        text: `Successfully parsed ${rows.length} valid student record(s) from JSON${detectedMsg}. Ready to calculate.`,
         type: 'ok',
       });
     } catch (err: any) {
@@ -621,15 +705,45 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
     setBusy(true);
 
     try {
+      const sample = excelRows[0];
+      const sampleKeys = sample && typeof sample === 'object' ? Object.keys(sample) : [];
+      const hasPgPapers = sampleKeys.some((k) => /^paper\s*[-:]?\s*1\.\d+/i.test(k.trim()));
+      const rawDept = String(sample.Department || sample.department || '').trim();
+      const rawRoll = String(sample['Autonomous Roll No'] || sample.autonomousRollNo || sample['College Roll No'] || sample.collegeRollNo || sample.r || sample.__EMPTY || '').trim().toUpperCase();
+      const isPgRoll = /^(ODIA|CHEM|MATH|COMM|GEOL|MFC)\d{2}-/i.test(rawRoll) || /^\d{3}NAC\d{2}/i.test(rawRoll);
+
+      let targetProgram = program;
+      let targetSemester = semester;
+      let targetBatch = batch;
+      let targetDept = department;
+
+      if (program === 'UG' && (hasPgPapers || isPgRoll)) {
+        targetProgram = 'PG';
+        targetSemester = 1;
+        const yrMatch = rawRoll.match(/(?:ODIA|CHEM|MATH|COMM|GEOL|MFC|NAC)(\d{2})/i);
+        if (yrMatch && yrMatch[1]) {
+          targetBatch = String(2000 + Number(yrMatch[1]));
+        }
+        if (rawDept && PG_DEPARTMENTS.includes(rawDept)) {
+          targetDept = rawDept;
+        } else if (/^ODIA/i.test(rawRoll)) {
+          targetDept = 'Odia';
+        }
+        setProgram('PG');
+        setSemester(1);
+        setBatch(targetBatch);
+        setDepartment(targetDept);
+      }
+
       const res = await fetch('/api/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          program,
-          semester,
-          batch,
+          program: targetProgram,
+          semester: targetSemester,
+          batch: targetBatch,
           course: course === 'ALL' ? 'AUTO' : course,
-          department: department === 'ALL' ? 'AUTO' : department,
+          department: targetDept === 'ALL' ? 'AUTO' : targetDept,
           students: excelRows.filter(isValidStudentRecord),
         }),
       });
@@ -1070,11 +1184,9 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
                       <td>
                         {p.maxMid > 0 ? (
                           <input
-                            type="number"
-                            min="0"
-                            max={p.maxMid}
+                            type="text"
                             value={p.midsem}
-                            placeholder={`Max ${p.maxMid}`}
+                            placeholder={`Max ${p.maxMid} or A`}
                             onChange={(e) => {
                               const val = e.target.value;
                               setPaperMarks((prev) =>
@@ -1093,11 +1205,9 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
                         <td>
                           {p.isPrac || p.maxPrac > 0 ? (
                             <input
-                              type="number"
-                              min="0"
-                              max={p.maxPrac || 50}
+                              type="text"
                               value={p.practical}
-                              placeholder={`Max ${p.maxPrac || 50}`}
+                              placeholder={`Max ${p.maxPrac || 50} or A`}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setPaperMarks((prev) =>
@@ -1115,11 +1225,9 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
                       )}
                       <td>
                         <input
-                          type="number"
-                          min="0"
-                          max={p.maxFinal}
+                          type="text"
                           value={p.final}
-                          placeholder={`Max ${p.maxFinal}`}
+                          placeholder={`Max ${p.maxFinal} or A`}
                           onChange={(e) => {
                             const val = e.target.value;
                             setPaperMarks((prev) =>
@@ -1452,7 +1560,7 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
                           <tr key={subIdx}>
                             <td>{sub.paperCode || `Paper ${subIdx + 1}`}</td>
                             <td>{sub.subjectName || '-'}</td>
-                            <td>{sub.marks ?? '-'}</td>
+                            <td>{isSubjectAbsent(sub) ? 'Absent' : (sub.marks ?? '-')}</td>
                             <td>{sub.fullMark ?? '-'}</td>
                             <td>{sub.credit ?? '-'}</td>
                             <td>

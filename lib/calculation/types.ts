@@ -38,6 +38,9 @@ export type SubjectResult = {
   gradePoint: number;
   creditPoint: number;
   grace?: number;
+  isAbsent?: boolean;
+  status?: 'PRESENT' | 'ABSENT' | string;
+  rawMark?: unknown;
 };
 
 export type StudentResult = {
@@ -58,4 +61,5 @@ export type StudentResult = {
   status?: string;
   usedGrace?: number;
   remainingGrace?: number;
+  isAbsent?: boolean;
 };

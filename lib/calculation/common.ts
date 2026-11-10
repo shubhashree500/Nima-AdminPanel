@@ -1,5 +1,7 @@
 import type { GradeResult } from './types';
 
+export * from './absence';
+
 export function toNumber(value: unknown): number {
   if (value === null || value === undefined || value === '') {
     return 0;

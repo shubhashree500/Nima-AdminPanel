@@ -1,4 +1,5 @@
 import { DBData, Student, ProgramKey, CalcResult } from '@/types';
+export * from './calculation/absence';
 
 export function getSubjects(
   db: DBData,

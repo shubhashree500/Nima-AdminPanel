@@ -68,6 +68,7 @@ pass: number;
 subjects: SubjectsMap;
 students: Student[];
 marks: MarksMap;
+marksStatus?: Record<string, Record<string, 'PRESENT' | 'ABSENT'>>;
 
 examSessions?: ExamSession[];
 

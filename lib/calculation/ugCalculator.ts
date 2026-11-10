@@ -62,7 +62,8 @@ function parseMark(
     if (
       value === 'AB' ||
       value === 'A.B' ||
-      value === 'ABSENT'
+      value === 'ABSENT' ||
+      value === 'A'
     ) {
       return { value: 0, status: 'AB' };
     }
@@ -234,6 +235,8 @@ function calculateRawMarks(
 
   // Preserve absent status if any supplied mark is marked absent.
   if (
+    subject?.isAbsent === true ||
+    String(subject?.status || '').toUpperCase() === 'ABSENT' ||
     final.status === 'AB' ||
     midsem.status === 'AB' ||
     attendance.status === 'AB' ||
@@ -433,6 +436,7 @@ export function calculateUGStudent(
       );
     }
 
+    const isAbs = calculated.status === 'AB';
     subjects.push({
       paperCode: paper.code,
       subjectName:
@@ -447,6 +451,9 @@ export function calculateUGStudent(
         paper.credit,
         grade.gradePoint,
       ),
+      isAbsent: isAbs,
+      status: isAbs ? 'ABSENT' : 'PRESENT',
+      rawMark: isAbs ? 'A' : calculated.marks,
     });
   }
 
@@ -526,6 +533,8 @@ export function calculateUGStudent(
     (s) => s.grade !== 'F' && s.grade !== 'AB' && s.grade !== 'M'
   );
 
+  const isStudentAbsent = subjects.length > 0 && subjects.every((s) => s.isAbsent === true);
+
   return {
     student,
     subjects,
@@ -542,5 +551,6 @@ export function calculateUGStudent(
     status: isPassed ? 'PASS' : 'FAIL',
     usedGrace,
     remainingGrace,
+    isAbsent: isStudentAbsent,
   };
 }

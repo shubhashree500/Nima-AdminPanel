@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useMemo, ChangeEvent } from 'react';
 import { DBData, PROG, ProgramKey } from '@/types';
-import { getSubjects, formatPct, findStudent } from '@/lib/calculations';
+import { getSubjects, formatPct, findStudent, isAbsentMark } from '@/lib/calculations';
 import { parseCSV, readSpreadsheetFile } from '@/lib/csv';
 
 interface MarksViewProps {
   db: DBData;
-  onSaveMarks: (roll: string, sem: number, marks: Record<string, number>) => Promise<boolean>;
-  onImportMarks: (sem: number, records: Array<{ r: string; m: Record<string, number> }>) => Promise<void>;
+  onSaveMarks: (roll: string, sem: number, marks: Record<string, number | string>) => Promise<boolean>;
+  onImportMarks: (sem: number, records: Array<{ r: string; m: Record<string, number | string> }>) => Promise<void>;
 }
 
 export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
@@ -24,7 +24,7 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
   // CSV Import state
   const [csvText, setCsvText] = useState('');
   const [impData, setImpData] = useState<{
-    records: Array<{ r: string; m: Record<string, number> }>;
+    records: Array<{ r: string; m: Record<string, number | string> }>;
     missingSubs: string[];
     errs: string[];
   } | null>(null);
@@ -53,14 +53,20 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
       setInputMarks({});
       return;
     }
-    const saved = db.marks[`${selectedRoll}|${sem}`] || {};
+    const key = `${selectedRoll}|${sem}`;
+    const saved = db.marks[key] || {};
+    const statusMap = db.marksStatus?.[key] || {};
     const initial: Record<string, string> = {};
     subjects.forEach((s) => {
-      initial[s] = saved[s] !== undefined ? String(saved[s]) : '';
+      if (statusMap[s] === 'ABSENT') {
+        initial[s] = 'A';
+      } else {
+        initial[s] = saved[s] !== undefined ? String(saved[s]) : '';
+      }
     });
     setInputMarks(initial);
     setMsg(null);
-  }, [selectedRoll, sem, subjects, db.marks]);
+  }, [selectedRoll, sem, subjects, db.marks, db.marksStatus]);
 
   // Live calculation based on current input values
   const liveCalc = useMemo(() => {
@@ -75,11 +81,15 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
     subjects.forEach((s) => {
       const raw = inputMarks[s];
       if (raw !== undefined && raw.trim() !== '') {
-        const val = Math.max(0, Math.min(db.max, Number(raw)));
         filledCount++;
-        t += val;
-        if (val < db.pass) {
-          fail = true;
+        if (isAbsentMark(raw)) {
+          fail = true; // Absent student remains failed
+        } else {
+          const val = Math.max(0, Math.min(db.max, Number(raw)));
+          t += val;
+          if (val < db.pass) {
+            fail = true;
+          }
         }
       }
     });
@@ -99,12 +109,16 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
   const handleSave = async (goToNext: boolean) => {
     if (!selectedRoll) return;
 
-    const marksToSave: Record<string, number> = {};
+    const marksToSave: Record<string, number | string> = {};
     let hasInvalid = false;
 
     for (const s of subjects) {
       const v = inputMarks[s];
       if (v === undefined || v.trim() === '') continue;
+      if (isAbsentMark(v)) {
+        marksToSave[s] = 'A';
+        continue;
+      }
       const num = Number(v);
       if (isNaN(num) || num < 0 || num > db.max) {
         hasInvalid = true;
@@ -114,7 +128,7 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
     }
 
     if (hasInvalid) {
-      setMsg({ text: `Marks must be between 0 and ${db.max}.`, type: 'bad' });
+      setMsg({ text: `Marks must be between 0 and ${db.max} (or 'A' for Absent).`, type: 'bad' });
       return;
     }
 
@@ -184,7 +198,7 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
     }
 
     const errs: string[] = [];
-    const out: Array<{ r: string; m: Record<string, number> }> = [];
+    const out: Array<{ r: string; m: Record<string, number | string> }> = [];
 
     rows.slice(1).forEach((x, i) => {
       const r = x[0] || '';
@@ -200,17 +214,21 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
         return;
       }
 
-      const m: Record<string, number> = {};
+      const m: Record<string, number | string> = {};
       let bad = false;
 
       subjects.forEach((s, k) => {
         if (colMap[k] < 1) return;
         const c = x[colMap[k]];
         if (c === undefined || c === '') return;
+        if (isAbsentMark(c)) {
+          m[s] = 'A';
+          return;
+        }
         const v = Number(c);
         if (isNaN(v) || v < 0 || v > db.max) {
           bad = true;
-          errs.push(`${line}${s} has "${c}", which is not between 0 and ${db.max}`);
+          errs.push(`${line}${s} has "${c}", which is not between 0 and ${db.max} (or 'A')`);
         } else {
           m[s] = v;
         }
@@ -320,19 +338,17 @@ export function MarksView({ db, onSaveMarks, onImportMarks }: MarksViewProps) {
             <div className="subs">
               {subjects.map((s) => {
                 const rawVal = inputMarks[s] || '';
+                const isAbs = isAbsentMark(rawVal);
                 const numVal = Number(rawVal);
-                const isLow = rawVal !== '' && !isNaN(numVal) && numVal < db.pass;
+                const isLow = isAbs || (rawVal !== '' && !isNaN(numVal) && numVal < db.pass);
 
                 return (
                   <label key={s}>
-                    {s} (out of {db.max})
+                    {s} (out of {db.max}, or 'A' for Absent)
                     <input
-                      type="number"
-                      min={0}
-                      max={db.max}
-                      step={1}
-                      inputMode="numeric"
+                      type="text"
                       className={isLow ? 'low' : ''}
+                      placeholder="Marks or A"
                       value={rawVal}
                       onChange={(e) => handleInputChange(s, e.target.value)}
                     />

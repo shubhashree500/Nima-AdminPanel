@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
 import { findStudent } from '@/lib/calculations';
+import { isAbsentMark } from '@/lib/calculation/absence';
 
 export async function POST(request: Request) {
   try {
@@ -68,15 +69,25 @@ export async function POST(request: Request) {
       const key = `${primaryRoll}|${semNum}`;
 
       const validM: Record<string, number> = {};
+      const statusM: Record<string, 'PRESENT' | 'ABSENT'> = {};
+
       for (const [sub, val] of Object.entries(m)) {
+        if (isAbsentMark(val)) {
+          validM[sub] = 0;
+          statusM[sub] = 'ABSENT';
+          continue;
+        }
         const num = Number(val);
         if (!Number.isNaN(num) && num >= 0 && num <= db.max) {
           validM[sub] = num;
+          statusM[sub] = 'PRESENT';
         }
       }
 
       if (Object.keys(validM).length > 0) {
         db.marks[key] = { ...(db.marks[key] || {}), ...validM };
+        db.marksStatus = db.marksStatus || {};
+        db.marksStatus[key] = { ...(db.marksStatus[key] || {}), ...statusM };
         importedCount++;
       }
     });

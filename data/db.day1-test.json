@@ -83,6 +83,9 @@
   },
   "students": [
     {
+      "r": "153NAC25001",
+      "n": "ABINASH KUMAR SAHOO",
+      "p": "PG",
       "batch": "2025",
       "programme": "PG",
       "autonomousRollNo": "153NAC25001",
@@ -92,9 +95,81 @@
       "abcId": "99999",
       "department": "Chemistry",
       "course": "Chemistry",
-      "stream": "PHYSICAL SCIENCES",
+      "stream": "PHYSICAL SCIENCES"
+    },
+    {
+      "r": "NACPG25002",
+      "n": "Diya Sharma",
+      "p": "PG",
+      "batch": "2025",
+      "programme": "PG",
+      "autonomousRollNo": "NACPG25002",
+      "collegeRollNo": "CHEM25-002",
+      "name": "Diya Sharma",
+      "dob": "2002-08-22",
+      "abcId": "ABC-2039485761",
+      "department": "Chemistry",
+      "course": "M.Sc Chemistry",
+      "stream": "Science"
+    },
+    {
+      "r": "NACUG25001",
+      "n": "Rohan Jena",
+      "p": "UG",
+      "batch": "2024",
+      "programme": "UG",
+      "autonomousRollNo": "NACUG25001",
+      "collegeRollNo": "BS24-001",
+      "name": "Rohan Jena",
+      "dob": "2004-03-10",
+      "abcId": "ABC-3049586712",
+      "department": "Physics",
+      "course": "BSC",
+      "stream": "Science"
+    },
+    {
+      "r": "NACUG25002",
+      "n": "Priya Nayak",
+      "p": "UG",
+      "batch": "2024",
+      "programme": "UG",
+      "autonomousRollNo": "NACUG25002",
+      "collegeRollNo": "BA24-001",
+      "name": "Priya Nayak",
+      "dob": "2004-11-05",
+      "abcId": "ABC-4059687123",
+      "department": "History",
+      "course": "BA",
+      "stream": "Arts"
+    },
+    {
+      "r": "NACUG25003",
+      "n": "Subham Dash",
+      "p": "UG",
+      "batch": "2024",
+      "programme": "UG",
+      "autonomousRollNo": "NACUG25003",
+      "collegeRollNo": "BC24-001",
+      "name": "Subham Dash",
+      "dob": "2004-07-19",
+      "abcId": "ABC-5069781234",
+      "department": "Commerce",
+      "course": "BCOM",
+      "stream": "Commerce"
+    },
+    {
+      "batch": "2025",
+      "programme": "PG",
+      "autonomousRollNo": "153NAC25001",
+      "collegeRollNo": "CHEM25-001",
+      "name": "ABINASH KUMAR SAHOO",
+      "dob": "11-02-2004",
+      "abcId": "99999",
+      "department": "Chemistry",
+      "course": "Chemistry",
+      "stream": "SCIENCE",
       "r": "153NAC25001",
-      "n": "ABINASH KUMAR SAHOO",
+      "n": "ABINASH SAHOO",
       "p": "PG"
     },
     {
@@ -124,7 +199,7 @@
   },
   "examSessions": [
     {
-      "id": "EXAM-1793254466835",
+      "id": "EXAM-1793948171514",
       "academicYear": "2025-26",
       "batch": 2025,
       "program": "PG",
@@ -132,12 +207,10 @@
       "semester": 1,
       "examType": "Regular",
       "status": "Draft",
-      "createdAt": "2026-10-29T06:14:26.835Z",
-      "updatedAt": "2026-10-29T06:14:26.839Z"
+      "createdAt": "2026-11-06T06:56:11.514Z",
+      "updatedAt": "2026-11-06T06:56:11.517Z"
     }
   ],
-  "recheckingApplications": [],
-  "resultCorrections": [],
   "calculatedResults": [
     {
       "id": "CALC-PUBLISHED-TEST",
@@ -145,7 +218,7 @@
       "semester": 1,
       "batch": "2025",
       "status": "published",
-      "createdAt": "2026-10-29T06:14:26.881Z",
+      "createdAt": "2026-11-06T06:56:11.550Z",
       "results": [
         {
           "student": {
@@ -163,5 +236,7 @@
         }
       ]
     }
-  ]
+  ],
+  "recheckingApplications": [],
+  "resultCorrections": []
 }

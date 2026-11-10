@@ -217,7 +217,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
   const handleSaveMarks = async (
     roll: string,
     sem: number,
-    marks: Record<string, number>
+    marks: Record<string, number | string>
   ): Promise<boolean> => {
     setIsSyncing(true);
 
@@ -252,7 +252,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     sem: number,
     records: Array<{
       r: string;
-      m: Record<string, number>;
+      m: Record<string, number | string>;
     }>
   ): Promise<void> => {
     setIsSyncing(true);

@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { COLLEGE_LOGO } from '@/lib/logo';
 import { isValidStudentRecord } from '@/lib/studentValidation';
+import { isSubjectAbsent, isAbsentMark, formatMarkDisplay, formatComponentMark } from '@/lib/calculation/absence';
 
 type ReportKind = 'grade-sheets' | 'tabular-register' | 'statistics';
 type Calculation = { id: string; program: string; semester: number; batch?: string | number; course?: string; department?: string; count?: number; status?: string; createdAt?: string; results?: any[]; hasRevisions?: boolean; departments?: any[] };
@@ -180,9 +181,9 @@ function getMidsemMark(subject: any, student: any, index: number): string | numb
   const pCode = String(sub.paperCode || sub.code || '').trim();
 
   // 1. Direct properties on subject
-  if (sub.midsemMark !== undefined && sub.midsemMark !== null && String(sub.midsemMark).trim() !== '') return sub.midsemMark;
-  if (sub.MidsemMark !== undefined && sub.MidsemMark !== null && String(sub.MidsemMark).trim() !== '') return sub.MidsemMark;
-  if (sub.midsemMarks !== undefined && sub.midsemMarks !== null && String(sub.midsemMarks).trim() !== '') return sub.midsemMarks;
+  if (sub.midsemMark !== undefined && sub.midsemMark !== null && String(sub.midsemMark).trim() !== '') return formatComponentMark(sub.midsemMark);
+  if (sub.MidsemMark !== undefined && sub.MidsemMark !== null && String(sub.MidsemMark).trim() !== '') return formatComponentMark(sub.MidsemMark);
+  if (sub.midsemMarks !== undefined && sub.midsemMarks !== null && String(sub.midsemMarks).trim() !== '') return formatComponentMark(sub.midsemMarks);
 
   // 2. Check student.subjects (mapped object or array)
   if (st.subjects) {
@@ -192,7 +193,7 @@ function getMidsemMark(subject: any, student: any, index: number): string | numb
     else if (typeof st.subjects === 'object') subObj = Object.values(st.subjects)[index];
     if (subObj) {
       const val = subObj.MidsemMark ?? subObj.midsemMark ?? subObj.midsemMarks;
-      if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+      if (val !== undefined && val !== null && String(val).trim() !== '') return formatComponentMark(val);
     }
   }
 
@@ -211,7 +212,7 @@ function getMidsemMark(subject: any, student: any, index: number): string | numb
   ];
   for (const src of sources) {
     for (const k of keys) {
-      if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return src[k];
+      if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return formatComponentMark(src[k]);
     }
   }
   return '—';
@@ -227,10 +228,10 @@ function getFinalMark(subject: any, student: any, index: number): string | numbe
   const pCode = String(sub.paperCode || sub.code || '').trim();
 
   // 1. Direct properties on subject
-  if (sub.finalMark !== undefined && sub.finalMark !== null && String(sub.finalMark).trim() !== '') return sub.finalMark;
-  if (sub.FinalMark !== undefined && sub.FinalMark !== null && String(sub.FinalMark).trim() !== '') return sub.FinalMark;
-  if (sub.endSemMarks !== undefined && sub.endSemMarks !== null && String(sub.endSemMarks).trim() !== '') return sub.endSemMarks;
-  if (sub.endSemMark !== undefined && sub.endSemMark !== null && String(sub.endSemMark).trim() !== '') return sub.endSemMark;
+  if (sub.finalMark !== undefined && sub.finalMark !== null && String(sub.finalMark).trim() !== '') return formatComponentMark(sub.finalMark);
+  if (sub.FinalMark !== undefined && sub.FinalMark !== null && String(sub.FinalMark).trim() !== '') return formatComponentMark(sub.FinalMark);
+  if (sub.endSemMarks !== undefined && sub.endSemMarks !== null && String(sub.endSemMarks).trim() !== '') return formatComponentMark(sub.endSemMarks);
+  if (sub.endSemMark !== undefined && sub.endSemMark !== null && String(sub.endSemMark).trim() !== '') return formatComponentMark(sub.endSemMark);
 
   // 2. Check student.subjects (mapped object or array)
   if (st.subjects) {
@@ -240,7 +241,7 @@ function getFinalMark(subject: any, student: any, index: number): string | numbe
     else if (typeof st.subjects === 'object') subObj = Object.values(st.subjects)[index];
     if (subObj) {
       const val = subObj.FinalMark ?? subObj.finalMark ?? subObj.endSemMarks ?? subObj.endSemMark;
-      if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+      if (val !== undefined && val !== null && String(val).trim() !== '') return formatComponentMark(val);
     }
   }
 
@@ -261,11 +262,12 @@ function getFinalMark(subject: any, student: any, index: number): string | numbe
   ];
   for (const src of sources) {
     for (const k of keys) {
-      if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return src[k];
+      if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return formatComponentMark(src[k]);
     }
   }
 
-  if (sub.marks !== undefined && sub.marks !== null && String(sub.marks).trim() !== '') return sub.marks;
+  if (isSubjectAbsent(sub)) return 'Absent';
+  if (sub.marks !== undefined && sub.marks !== null && String(sub.marks).trim() !== '') return formatComponentMark(sub.marks);
   return '—';
 }
 
@@ -579,8 +581,8 @@ const reportResults = useMemo(() => {
 
     const isAbsent = (student: any): boolean => {
       const subjects = subjectsOf(student);
-      if (!subjects.length) return true;
-      return subjects.every((s) => Number(s.marks ?? s.totalMark ?? 0) === 0);
+      if (!subjects.length) return false;
+      return subjects.every((s) => isSubjectAbsent(s));
     };
 
     const isFail = (student: any): boolean => {
@@ -1011,7 +1013,7 @@ const reportResults = useMemo(() => {
           const midsem = getMidsemMark(subj, student, sIdx);
           const fullMark = getFullMark(department, subj, sIdx);
           const finalMark = getFinalMark(subj, student, sIdx);
-          const totalMark = subj.marks ?? subj.totalMark ?? 0;
+          const totalMark = isSubjectAbsent(subj) ? 'Absent' : (subj.marks ?? subj.totalMark ?? 0);
           const grace = subj.grace || subj.graceMarks || '';
           const grade = subj.grade || '';
           const gradeUpper = String(grade).toUpperCase();
@@ -1395,7 +1397,7 @@ const reportResults = useMemo(() => {
                 midMark !== '' ? midMark : '-',
                 fullMark,
                 finMark !== '' ? finMark : '-',
-                sub.marks ?? 0,
+                isSubjectAbsent(sub) ? 'Absent' : (sub.marks ?? 0),
                 '-',
                 sub.grade || '',
                 sub.gradePoint ?? '',
@@ -1436,7 +1438,7 @@ const reportResults = useMemo(() => {
             deptOf(r),
             s.paperCode || '',
             s.subjectName || s.subject || '',
-            s.marks ?? 0,
+            isSubjectAbsent(s) ? 'Absent' : (s.marks ?? 0),
             s.fullMark ?? 0,
             s.grade || '',
             s.gradePoint ?? '',
@@ -1525,7 +1527,7 @@ const reportResults = useMemo(() => {
                 midMark !== '' ? midMark : '-',
                 fullMark,
                 finMark !== '' ? finMark : '-',
-                sub.marks ?? 0,
+                isSubjectAbsent(sub) ? 'Absent' : (sub.marks ?? 0),
                 '-',
                 sub.grade || '',
                 sub.gradePoint ?? '',
@@ -1566,7 +1568,7 @@ const reportResults = useMemo(() => {
             deptOf(r),
             s.paperCode || '',
             s.subjectName || s.subject || '',
-            s.marks ?? 0,
+            isSubjectAbsent(s) ? 'Absent' : (s.marks ?? 0),
             s.fullMark ?? 0,
             s.grade || '',
             s.gradePoint ?? '',
@@ -1640,7 +1642,7 @@ const reportResults = useMemo(() => {
     const tableData = subjectsOf(r).map((s, idx) => [
       s.paperCode || idx + 1,
       s.subjectName || s.subject || '-',
-      s.marks ?? 0,
+      isSubjectAbsent(s) ? 'Absent' : (s.marks ?? 0),
       s.fullMark ?? '-',
       s.grade || '-',
       s.gradePoint ?? '-',
@@ -2032,7 +2034,7 @@ const reportResults = useMemo(() => {
                             {s.subjectName || s.subject || '-'}
                           </td>
                           <td className="border p-2 text-center">
-                            {s.marks ?? 0}
+                            {isSubjectAbsent(s) ? 'Absent' : (s.marks ?? 0)}
                           </td>
                           <td className="border p-2 text-center">
                             {s.fullMark ?? '-'}
@@ -2176,7 +2178,7 @@ const reportResults = useMemo(() => {
                                       <td className="border-r border-gray-200 px-2 py-1.5 text-center text-gray-700">{midMark !== '' ? midMark : '—'}</td>
                                       <td className="border-r border-gray-200 px-2 py-1.5 text-center text-gray-600">{fullMark}</td>
                                       <td className="border-r border-gray-200 px-2 py-1.5 text-center text-gray-700">{finMark !== '' ? finMark : '—'}</td>
-                                      <td className="border-r border-gray-200 px-2 py-1.5 text-center font-semibold text-gray-800">{sub.marks ?? 0}</td>
+                                      <td className="border-r border-gray-200 px-2 py-1.5 text-center font-semibold text-gray-800">{isSubjectAbsent(sub) ? 'Absent' : (sub.marks ?? 0)}</td>
                                       <td className="border-r border-gray-200 px-2 py-1.5 text-center text-gray-400">—</td>
                                       <td className={`border-r border-gray-200 px-2 py-1.5 text-center font-bold ${isFail ? 'text-[#8B4513]' : 'text-gray-800'}`}>{sub.grade || '—'}</td>
                                       <td className="border-r border-gray-200 px-2 py-1.5 text-center text-gray-700">{sub.gradePoint ?? '—'}</td>

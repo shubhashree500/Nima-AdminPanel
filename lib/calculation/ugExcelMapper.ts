@@ -184,7 +184,8 @@ function getValue(
   for (const key of keys) {
     if (
       row?.[key] !== undefined &&
-      row?.[key] !== null
+      row?.[key] !== null &&
+      String(row[key]).trim() !== ''
     ) {
       return row[key];
     }
@@ -193,26 +194,201 @@ function getValue(
   return '';
 }
 
+const DIRECT_FIELD_VARIANTS: Record<string, string[]> = {
+  MidsemMark: [
+    'MidsemMark',
+    'Midsem-Mark',
+    'Midsem Mark',
+    'Midsem_Mark',
+    'MidSemMark',
+    'Midsem',
+    'MID',
+    'Mid',
+    'idsem-Ma',
+    'idsem-Mark',
+    'idsem',
+  ],
+  FinalMark: [
+    'FinalMark',
+    'Final-Mark',
+    'Final Mark',
+    'Final_Mark',
+    'Final',
+    'EndsemMark',
+    'Endsem-Mark',
+    'Endsem Mark',
+    'Endsem_Mark',
+    'Endsem',
+    'End-Sem',
+    'End',
+    'END',
+  ],
+  PracticalMark: [
+    'PracticalMark',
+    'Practical-Mark',
+    'Practical Mark',
+    'Practical_Mark',
+    'Practical',
+    'PRAC',
+  ],
+  'I-Practical': [
+    'I-Practical',
+    'IPractical',
+    'InternalPractical',
+    'Internal-Practical',
+    'I Practical',
+    'I_Practical',
+  ],
+  Attandance: [
+    'Attandance',
+    'Attendance',
+    'Attandance-Mark',
+    'Attendance-Mark',
+    'Attandance Mark',
+    'Attendance Mark',
+  ],
+  SurpriseTest: [
+    'SurpriseTest',
+    'Surprise-Test',
+    'Surprise Test',
+    'Surprise_Test',
+    'Surprise',
+  ],
+  Assignment: [
+    'Assignment',
+    'Assignment-Mark',
+    'Assignment Mark',
+    'Assignment_Mark',
+  ],
+};
+
+function normalizeFieldKey(key: string): string {
+  return String(key ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-_\s.]/g, '');
+}
+
+const FIELD_PATTERNS: Record<string, (k: string) => boolean> = {
+  MidsemMark: (k) =>
+    k.startsWith('midsem') ||
+    k.startsWith('midmark') ||
+    k.startsWith('idsem') ||
+    k.startsWith('idsemma') ||
+    k === 'mid',
+  FinalMark: (k) =>
+    k.startsWith('finalmark') ||
+    k.startsWith('final') ||
+    k.startsWith('endsem') ||
+    k.startsWith('endmark') ||
+    k === 'end',
+  PracticalMark: (k) =>
+    (k.startsWith('practical') || k.startsWith('prac')) &&
+    !k.startsWith('ipractical') &&
+    !k.startsWith('internalpractical'),
+  'I-Practical': (k) =>
+    k.startsWith('ipractical') || k.startsWith('internalpractical'),
+  Attandance: (k) =>
+    k.startsWith('attandance') || k.startsWith('attendance'),
+  SurpriseTest: (k) =>
+    k.startsWith('surprisetest') || k.startsWith('surprise'),
+  Assignment: (k) =>
+    k.startsWith('assignment'),
+};
+
 /**
- * Reads the exact repeated Excel headers.
- *
- * Index 0 -> MidsemMark
- * Index 1 -> MidsemMark_1
- * Index 2 -> MidsemMark_2
- * Index 3 -> MidsemMark_3
- * Index 4 -> MidsemMark_4
+ * Reads repeated Excel headers supporting standard keys,
+ * hyphenated keys (Midsem-Mark), spaced keys, and positional occurrences.
  */
-function getRepeatedValue(
+export function getRepeatedValue(
   row: any,
   field: string,
   index: number,
 ): any {
-  const key =
-    index === 0
-      ? field
-      : `${field}_${index}`;
+  if (!row || typeof row !== 'object') return '';
 
-  return row?.[key] ?? '';
+  // 1. Direct standard key (e.g. MidsemMark or MidsemMark_1)
+  const standardKey = index === 0 ? field : `${field}_${index}`;
+  if (
+    row[standardKey] !== undefined &&
+    row[standardKey] !== null &&
+    String(row[standardKey]).trim() !== ''
+  ) {
+    return row[standardKey];
+  }
+
+  // 2. Direct variants with index suffix (e.g. Midsem-Mark, Midsem-Mark_1, Final-Mark, Final-Mark_1)
+  const variants = DIRECT_FIELD_VARIANTS[field] || [];
+  for (const v of variants) {
+    const k = index === 0 ? v : `${v}_${index}`;
+    if (
+      row[k] !== undefined &&
+      row[k] !== null &&
+      String(row[k]).trim() !== ''
+    ) {
+      return row[k];
+    }
+  }
+
+  // 3. Dynamic scan across row keys using normalized matching
+  const matcher = FIELD_PATTERNS[field];
+  if (matcher) {
+    const rowKeys = Object.keys(row);
+
+    // Look for a key ending in _${index} whose base matches matcher
+    if (index > 0) {
+      const indexedKey = rowKeys.find((k) => {
+        if (!k.endsWith(`_${index}`)) return false;
+        const base = k.slice(0, -(index.toString().length + 1));
+        return matcher(normalizeFieldKey(base));
+      });
+      if (
+        indexedKey &&
+        row[indexedKey] !== undefined &&
+        row[indexedKey] !== null &&
+        String(row[indexedKey]).trim() !== ''
+      ) {
+        return row[indexedKey];
+      }
+    } else {
+      // index === 0: look for key without any _\d+ suffix or with _0
+      const zeroKey = rowKeys.find((k) => {
+        if (/_0$/.test(k)) {
+          const base = k.slice(0, -2);
+          return matcher(normalizeFieldKey(base));
+        }
+        if (/_([1-9]\d*)$/.test(k)) return false;
+        return matcher(normalizeFieldKey(k));
+      });
+      if (
+        zeroKey &&
+        row[zeroKey] !== undefined &&
+        row[zeroKey] !== null &&
+        String(row[zeroKey]).trim() !== ''
+      ) {
+        return row[zeroKey];
+      }
+    }
+
+    // 4. Positional fallback: collect all keys matching this field in order
+    const matchingKeys = rowKeys.filter((k) => {
+      const base = k.replace(/_\d+$/, '');
+      return matcher(normalizeFieldKey(base));
+    });
+
+    if (matchingKeys[index] !== undefined) {
+      const val = row[matchingKeys[index]];
+      if (
+        val !== undefined &&
+        val !== null &&
+        String(val).trim() !== ''
+      ) {
+        return val;
+      }
+    }
+  }
+
+  return '';
 }
 
 // =====================================================
@@ -299,6 +475,7 @@ export function mapUGExcelStudent(
     'Autonomous Roll No.',
     'autonomousRollNo',
     'r',
+    '__EMPTY',
   ]);
 
   const department = getValue(row, [
@@ -323,7 +500,7 @@ export function mapUGExcelStudent(
     'r',
   ]);
 
-  const collegeRollNo = getValue(row, [
+  let collegeRollNo = getValue(row, [
     'College Roll No',
     'College Roll No.',
     'collegeRollNo',
@@ -331,6 +508,10 @@ export function mapUGExcelStudent(
     'Roll No.',
     'rollNo',
   ]);
+
+  if (!collegeRollNo && row?.__EMPTY && !/^\s*$/.test(String(row.__EMPTY))) {
+    collegeRollNo = String(row.__EMPTY).trim();
+  }
 
   const studentName = getValue(row, [
     'Name of the Students',

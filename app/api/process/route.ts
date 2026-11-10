@@ -274,6 +274,9 @@ function saveCalculation({
       count: existingRecord.count,
       passed: existingRecord.passed,
       failed: existingRecord.failed,
+      program: existingRecord.program,
+      semester: existingRecord.semester,
+      batch: existingRecord.batch,
       departments: existingRecord.departments || [],
       results: existingRecord.results,
     });
@@ -324,6 +327,10 @@ function saveCalculation({
     passed,
     failed,
 
+    program: calculationRecord.program,
+    semester: calculationRecord.semester,
+    batch: calculationRecord.batch,
+
     departments:
       departments || [],
 
@@ -342,13 +349,13 @@ export async function POST(
     const body =
       await request.json();
 
-    const program =
+    let program =
       body.program;
 
-    const semester =
+    let semester =
       Number(body.semester);
 
-    const batch =
+    let batch =
       body.batch;
 
     const course =
@@ -357,7 +364,7 @@ export async function POST(
     const mode =
       body.mode || 'normal';
 
-    const requestedDepartment =
+    let requestedDepartment =
       body.department;
 
     const students =
@@ -385,6 +392,50 @@ export async function POST(
       throw new Error(
         'No student data found in the uploaded file.',
       );
+    }
+
+    // Auto-detect: If submitted under UG but the dataset contains PG papers (Paper 1.1...) or PG rolls
+    const sampleStudent = students[0];
+    if (sampleStudent && typeof sampleStudent === 'object') {
+      const sampleKeys = Object.keys(sampleStudent);
+      const hasPgPapers = sampleKeys.some((k) => /^paper\s*[-:]?\s*1\.\d+/i.test(k.trim()));
+      const rawSampleRoll = String(
+        sampleStudent['Autonomous Roll No'] ||
+        sampleStudent.autonomousRollNo ||
+        sampleStudent['College Roll No'] ||
+        sampleStudent.collegeRollNo ||
+        sampleStudent.r ||
+        sampleStudent.__EMPTY ||
+        ''
+      ).trim().toUpperCase();
+      const isPgRoll = /^(ODIA|CHEM|MATH|COMM|GEOL|MFC)\d{2}-/i.test(rawSampleRoll) || /^\d{3}NAC\d{2}/i.test(rawSampleRoll);
+
+      if (program === 'UG' && (hasPgPapers || isPgRoll)) {
+        program = 'PG';
+        semester = 1;
+        const yrMatch = rawSampleRoll.match(/(?:ODIA|CHEM|MATH|COMM|GEOL|MFC|NAC)(\d{2})/i);
+        if (yrMatch && yrMatch[1]) {
+          batch = String(2000 + Number(yrMatch[1]));
+        }
+        if (!requestedDepartment || requestedDepartment === 'ALL' || requestedDepartment === 'AUTO') {
+          const rawDept = String(sampleStudent.Department || sampleStudent.department || '').trim();
+          if (rawDept && ['Odia', 'Chemistry', 'Mathematics', 'Commerce', 'Geology', 'MFC'].some((d) => d.toLowerCase() === rawDept.toLowerCase())) {
+            requestedDepartment = rawDept;
+          } else if (/^ODIA/i.test(rawSampleRoll)) {
+            requestedDepartment = 'Odia';
+          } else if (/^CHEM/i.test(rawSampleRoll)) {
+            requestedDepartment = 'Chemistry';
+          } else if (/^MATH/i.test(rawSampleRoll)) {
+            requestedDepartment = 'Mathematics';
+          } else if (/^COMM/i.test(rawSampleRoll)) {
+            requestedDepartment = 'Commerce';
+          } else if (/^GEOL/i.test(rawSampleRoll)) {
+            requestedDepartment = 'Geology';
+          } else if (/^MFC/i.test(rawSampleRoll)) {
+            requestedDepartment = 'MFC';
+          }
+        }
+      }
     }
 
     // =================================================

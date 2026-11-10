@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
+import { isSubjectAbsent, formatMarkDisplay, formatComponentMark } from '@/lib/calculation/absence';
 
 type Application = {
   id: string;
@@ -908,17 +909,17 @@ export function RecheckingView() {
                             <td className="border p-2.5">{paper.title}</td>
                             <td className="border p-2.5 capitalize text-xs text-gray-500">{paper.type}</td>
                             <td className="border p-2.5 text-center">
-                              {paper.components.sem.value ?? '—'}
+                              {formatComponentMark(paper.components.sem.value)}
                               <span className="text-xs text-gray-400">/{paper.components.sem.max}</span>
                             </td>
                             <td className="border p-2.5 text-center">
-                              {paper.components.midsem.value ?? '—'}
+                              {formatComponentMark(paper.components.midsem.value)}
                               <span className="text-xs text-gray-400">/{paper.components.midsem.max}</span>
                             </td>
                             <td className="border p-2.5 text-center">
                               {paper.components.practical.value !== null ? (
                                 <>
-                                  {paper.components.practical.value}
+                                  {formatComponentMark(paper.components.practical.value)}
                                   <span className="text-xs text-gray-400">/{paper.components.practical.max}</span>
                                 </>
                               ) : (
@@ -928,7 +929,7 @@ export function RecheckingView() {
                             <td className="border p-2.5 text-center">
                               {paper.components.attendance.value !== null ? (
                                 <>
-                                  {paper.components.attendance.value}
+                                  {formatComponentMark(paper.components.attendance.value)}
                                   <span className="text-xs text-gray-400">/{paper.components.attendance.max}</span>
                                 </>
                               ) : (
@@ -936,7 +937,7 @@ export function RecheckingView() {
                               )}
                             </td>
                             <td className="border p-2.5 text-center font-bold">
-                              {paper.marks} / {paper.fullMark}
+                              {isSubjectAbsent(paper) ? 'Absent' : paper.marks} / {paper.fullMark}
                               {paper.grace > 0 && (
                                 <span className="ml-1 text-xs text-amber-600 font-semibold">(+{paper.grace} Grace)</span>
                               )}
@@ -956,7 +957,7 @@ export function RecheckingView() {
                               <div className="flex flex-col items-center gap-1">
                                 {stagedForPaper ? (
                                   <span className="rounded bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                                    Staged: {stagedForPaper.component.toUpperCase()} {stagedForPaper.oldValue ?? '—'} → {stagedForPaper.newValue}
+                                    Staged: {stagedForPaper.component.toUpperCase()} {isSubjectAbsent(paper) ? 'Absent' : (stagedForPaper.oldValue ?? '—')} → {stagedForPaper.newValue}
                                   </span>
                                 ) : null}
                                 <div className="flex items-center gap-1">
@@ -1591,7 +1592,7 @@ export function RecheckingView() {
                                                 </td>
                                                 <td className="p-2.5 text-center">
                                                   <div className="flex items-center justify-center gap-1.5">
-                                                    <span className="text-gray-500">{p.originalMarks} ({p.originalGrade})</span>
+                                                    <span className="text-gray-500">{p.originalGrade === 'AB' || p.originalMarks === 'Absent' ? 'Absent' : p.originalMarks} ({p.originalGrade})</span>
                                                     <span>→</span>
                                                     <span className="font-bold text-green-700">{p.revisedMarks} ({p.revisedGrade})</span>
                                                   </div>

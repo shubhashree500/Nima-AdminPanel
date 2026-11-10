@@ -79,13 +79,15 @@ export function ResultsView({ db }: ResultsViewProps) {
     ];
 
     filteredStudents.forEach((s) => {
-      const m = db.marks[`${s.r}|${sem}`] || {};
+      const key = `${s.r}|${sem}`;
+      const m = db.marks[key] || {};
+      const statusMap = db.marksStatus?.[key] || {};
       const c = calculateResult(db, s, sem);
 
       const row = [
         s.r,
         `"${s.n.replace(/"/g, '""')}"`,
-        ...subs.map((x) => (m[x] !== undefined ? m[x] : '')),
+        ...subs.map((x) => (statusMap[x] === 'ABSENT' ? 'Absent' : (m[x] !== undefined ? m[x] : ''))),
         c.t !== undefined ? c.t : '',
         c.pct !== undefined ? formatPct(c.pct) : '',
         c.status,
@@ -351,11 +353,13 @@ export function ResultsView({ db }: ResultsViewProps) {
                                         <tbody>
                                           {subs.map((subject) => {
                                             const v = m[subject];
+                                            const key = `${selectedStudent?.r || ''}|${sem}`;
+                                            const isAbs = db.marksStatus?.[key]?.[subject] === 'ABSENT';
                                             const has =
                                               v !== undefined &&
                                               (v as unknown) !== '';
                                             const isPass =
-                                              has && Number(v) >= db.pass;
+                                              has && !isAbs && Number(v) >= db.pass;
 
                                             return (
                                               <tr key={subject}>
@@ -364,13 +368,15 @@ export function ResultsView({ db }: ResultsViewProps) {
                                                   {db.max}
                                                 </td>
                                                 <td className="num">
-                                                  {has ? v : '-'}
+                                                  {has ? (isAbs ? 'Absent' : v) : '-'}
                                                 </td>
                                                 <td>
                                                   {has
                                                     ? isPass
                                                       ? 'Pass'
-                                                      : 'Fail'
+                                                      : isAbs
+                                                        ? 'Absent'
+                                                        : 'Fail'
                                                     : '-'}
                                                 </td>
                                               </tr>

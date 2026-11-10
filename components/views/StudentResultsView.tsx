@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { isValidStudentRecord } from '@/lib/studentValidation';
+import { isSubjectAbsent } from '@/lib/calculation/absence';
 
 type Calculation = {
   id: string;
@@ -601,7 +602,7 @@ export function StudentResultsView() {
                                                 </td>
 
                                                 <td className="border p-2">
-                                                  {subject.marks ?? 0}
+                                                  {isSubjectAbsent(subject) ? 'Absent' : (subject.marks ?? 0)}
                                                 </td>
 
                                                 <td className="border p-2">

@@ -6,6 +6,7 @@ import type {
 import type {
   SubjectResult,
 } from './types';
+import { getRepeatedValue } from './ugExcelMapper';
 /* =========================================================
    MARK PARSER
    ========================================================= */
@@ -30,7 +31,8 @@ function parseMark(value: unknown): ParsedMark {
   if (
     text === 'AB' ||
     text === 'A.B' ||
-    text === 'ABSENT'
+    text === 'ABSENT' ||
+    text === 'A'
   ) {
     return { type: 'absent' };
   }
@@ -606,12 +608,12 @@ function getPaperMarks(
 
   if (paper.type === 'practical') {
     const practicalKey =
-      mapping.practical ?? mapping.final;
+      mapping?.practical ?? mapping?.final;
 
     const practicalValue =
-      practicalKey
-        ? student[practicalKey]
-        : undefined;
+      (practicalKey ? student[practicalKey] : undefined) ??
+      getRepeatedValue(student, 'PracticalMark', paperIndex) ??
+      getRepeatedValue(student, 'FinalMark', paperIndex);
 
     return {
       midsem: { type: 'other' },
@@ -619,18 +621,17 @@ function getPaperMarks(
     };
   }
 
-  return {
-    midsem: parseMark(
-      mapping.mid
-        ? student[mapping.mid]
-        : undefined,
-    ),
+  const rawMid =
+    (mapping?.mid ? student[mapping.mid] : undefined) ??
+    getRepeatedValue(student, 'MidsemMark', paperIndex);
 
-    final: parseMark(
-      mapping.final
-        ? student[mapping.final]
-        : undefined,
-    ),
+  const rawFinal =
+    (mapping?.final ? student[mapping.final] : undefined) ??
+    getRepeatedValue(student, 'FinalMark', paperIndex);
+
+  return {
+    midsem: parseMark(rawMid),
+    final: parseMark(rawFinal),
   };
 }
 
@@ -701,6 +702,9 @@ function calculatePaper(
       grade: 'AB',
       gradePoint: 0,
       creditPoint: 0,
+      isAbsent: true,
+      status: 'ABSENT',
+      rawMark: 'A',
     };
   }
 
@@ -722,6 +726,9 @@ function calculatePaper(
       grade: 'M',
       gradePoint: 0,
       creditPoint: 0,
+      isAbsent: false,
+      status: 'M',
+      rawMark: 'M',
     };
   }
 
@@ -740,6 +747,9 @@ function calculatePaper(
       grade: 'F',
       gradePoint: 0,
       creditPoint: 0,
+      isAbsent: false,
+      status: 'PRESENT',
+      rawMark: 0,
     };
   }
 
@@ -793,6 +803,9 @@ function calculatePaper(
     grade: gradeResult.grade,
     gradePoint: gradeResult.gradePoint,
     creditPoint,
+    isAbsent: false,
+    status: 'PRESENT',
+    rawMark: total,
   };
 }
 
@@ -942,5 +955,11 @@ export function calculatePGStudent(
     sgpa,
 
     percentage,
+
+    isPassed: subjects.every((s: SubjectResult) => s.grade !== 'F' && s.grade !== 'AB' && s.grade !== 'M'),
+    passed: subjects.every((s: SubjectResult) => s.grade !== 'F' && s.grade !== 'AB' && s.grade !== 'M'),
+    resultStatus: subjects.every((s: SubjectResult) => s.grade !== 'F' && s.grade !== 'AB' && s.grade !== 'M') ? 'PASS' : 'FAIL',
+    status: subjects.every((s: SubjectResult) => s.grade !== 'F' && s.grade !== 'AB' && s.grade !== 'M') ? 'PASS' : 'FAIL',
+    isAbsent: subjects.length > 0 && subjects.every((s: SubjectResult) => s.isAbsent === true),
   };
 }

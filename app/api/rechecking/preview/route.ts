@@ -10,6 +10,7 @@ import {
   validateRecheckingMarkChange,
 } from '@/lib/rules/rechecking';
 import { getPgPaperSourceKeys } from '@/lib/calculation/pgCalculator';
+import { isSubjectAbsent } from '@/lib/calculation/absence';
 
 function text(value: unknown): string {
   return String(value ?? '').trim();
@@ -481,6 +482,10 @@ function applyComponentToStudent(
       };
     }
 
+    // Update status to PRESENT when valid marks replace absent marks
+    updated.subjects[matchedKey].isAbsent = false;
+    updated.subjects[matchedKey].status = 'PRESENT';
+
     if (norm === 'midsem') {
       updated.subjects[matchedKey].MidsemMark = newValue;
     } else if (
@@ -519,6 +524,10 @@ function applyComponentToStudent(
       courseEntry = { paper: paper.code };
       updated.courses.push(courseEntry);
     }
+
+    // Update status to PRESENT when valid marks replace absent marks
+    courseEntry.isAbsent = false;
+    courseEntry.status = 'PRESENT';
 
     if (norm === 'midsem') {
       courseEntry.midsemMark = newValue;
@@ -846,6 +855,8 @@ export async function GET(request: Request) {
           gradePoint: subject.gradePoint ?? 0,
           creditPoint: subject.creditPoint ?? 0,
           grace: subject.grace ?? 0,
+          isAbsent: isSubjectAbsent(subject),
+          status: isSubjectAbsent(subject) ? 'ABSENT' : 'PRESENT',
           components: {
             midsem: {
               value: extracted.midsem,

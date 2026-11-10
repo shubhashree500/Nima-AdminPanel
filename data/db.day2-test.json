@@ -135,7 +135,7 @@
   ],
   "calculatedResults": [
     {
-      "id": "CALC-STATE-TEST-1793254456595",
+      "id": "CALC-STATE-TEST-1793948176858",
       "status": "published",
       "program": "UG",
       "semester": 1,
@@ -145,7 +145,7 @@
       "count": 1,
       "passed": 1,
       "failed": 0,
-      "createdAt": "2026-10-29T06:14:16.595Z",
+      "createdAt": "2026-11-06T06:56:16.858Z",
       "results": [
         {
           "student": {
@@ -214,7 +214,10 @@
               "credit": 4,
               "grade": "A+",
               "gradePoint": 9,
-              "creditPoint": 36
+              "creditPoint": 36,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 84
             },
             {
               "paperCode": "CC-102",
@@ -225,7 +228,10 @@
               "credit": 4,
               "grade": "A",
               "gradePoint": 8,
-              "creditPoint": 32
+              "creditPoint": 32,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 75
             },
             {
               "paperCode": "CC-103",
@@ -236,7 +242,10 @@
               "credit": 4,
               "grade": "B+",
               "gradePoint": 7,
-              "creditPoint": 28
+              "creditPoint": 28,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 69
             },
             {
               "paperCode": "MDE-101",
@@ -247,7 +256,10 @@
               "credit": 4,
               "grade": "B+",
               "gradePoint": 7,
-              "creditPoint": 28
+              "creditPoint": 28,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 62
             },
             {
               "paperCode": "AEC-101",
@@ -258,7 +270,10 @@
               "credit": 4,
               "grade": "B",
               "gradePoint": 6,
-              "creditPoint": 24
+              "creditPoint": 24,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 59
             },
             {
               "paperCode": "AEC-102",
@@ -269,7 +284,10 @@
               "credit": 4,
               "grade": "B",
               "gradePoint": 6,
-              "creditPoint": 24
+              "creditPoint": 24,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 53
             },
             {
               "paperCode": "VAC-101",
@@ -280,18 +298,29 @@
               "credit": 3,
               "grade": "B",
               "gradePoint": 6,
-              "creditPoint": 18
+              "creditPoint": 18,
+              "isAbsent": false,
+              "status": "PRESENT",
+              "rawMark": 50
             }
           ],
+          "totalMarks": 452,
+          "grandTotal": 452,
+          "totalFullMarks": 700,
           "totalCredits": 27,
           "totalCreditPoints": 190,
           "sgpa": 7.04,
           "percentage": 64.57,
+          "isPassed": true,
+          "passed": true,
+          "resultStatus": "PASS",
+          "status": "PASS",
           "usedGrace": 0,
-          "remainingGrace": 8
+          "remainingGrace": 8,
+          "isAbsent": false
         }
       ],
-      "publishedAt": "2026-10-29T06:14:16.609Z"
+      "publishedAt": "2026-11-06T06:56:16.870Z"
     }
   ],
   "recheckingApplications": [],

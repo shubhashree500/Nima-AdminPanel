@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isValidStudentRecord } from '@/lib/studentValidation';
+import { isSubjectAbsent } from '@/lib/calculation/absence';
 
 type Calculation = {
   id: string;
@@ -118,8 +119,19 @@ function hasZeroMarksInEverySubject(result: any): boolean {
     subjects.length > 0 &&
     subjects.every((subject: any) => {
       const marks = Number(subject?.marks);
-      return Number.isFinite(marks) && marks === 0;
+      return Number.isFinite(marks) && marks === 0 && !isSubjectAbsent(subject);
     })
+  );
+}
+
+function hasAbsentInEverySubject(result: any): boolean {
+  const subjects = Array.isArray(result?.subjects)
+    ? result.subjects
+    : [];
+
+  return (
+    subjects.length > 0 &&
+    subjects.every((subject: any) => isSubjectAbsent(subject))
   );
 }
 
@@ -787,12 +799,14 @@ export function PublishView() {
                           const resultStatus =
                             getStudentResultStatus(result);
 
-                          const totalMarks =
-                            result?.grandTotal ??
-                            result?.totalMarks ??
-                            result?.totalMark ??
-                            result?.total ??
-                            '-';
+                          const isAllAbs = hasAbsentInEverySubject(result);
+                          const totalMarks = isAllAbs
+                            ? 'Absent'
+                            : (result?.grandTotal ??
+                              result?.totalMarks ??
+                              result?.totalMark ??
+                              result?.total ??
+                              '-');
 
                           return (
                             <tr

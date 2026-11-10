@@ -1,6 +1,7 @@
-﻿
+
 import { NextResponse } from 'next/server';
 import { getDB, saveDB } from '@/lib/db';
+import { isSubjectAbsent } from '@/lib/calculation/absence';
 
 const STATUSES = [
   'Submitted',
@@ -331,6 +332,7 @@ export async function POST(request: Request) {
       originalFullMark: subject.fullMark,
       originalGrade: subject.grade,
       originalGradePoint: subject.gradePoint,
+      isAbsent: isSubjectAbsent(subject),
 
       status: 'Submitted',
       decisionNotes: '',
