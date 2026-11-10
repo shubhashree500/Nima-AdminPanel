@@ -14,6 +14,7 @@ import { isSubjectAbsent, isAbsentMark, formatMarkDisplay } from '@/lib/calculat
 interface ProcessViewProps {
   db?: DBData;
   onProceedToVerify?: () => void;
+  onSync?: () => Promise<void>;
 }
 
 type EntryMode = 'individual' | 'bulk';
@@ -137,7 +138,7 @@ function getSuggestedPapers(prog: ProgramKey, sem: number, dept: string): Staged
   }
 }
 
-export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
+export function ProcessView({ db, onProceedToVerify, onSync }: ProcessViewProps) {
   const [entryMode, setEntryMode] = useState<EntryMode>('individual');
 
   const [program, setProgram] = useState<ProgramKey>('UG');
@@ -547,6 +548,7 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
       });
 
       await loadSavedCalculations();
+      if (onSync) await onSync();
     } catch (e: any) {
       setMessage({
         text: e.message || 'Calculation failed.',
@@ -766,6 +768,7 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
       });
 
       await loadSavedCalculations();
+      if (onSync) await onSync();
     } catch (e: any) {
       setMessage({
         text: e.message || 'Calculation failed.',
@@ -813,6 +816,40 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
           >
             Load Calculation
           </button>
+
+          {(() => {
+            const sel = savedCalculations.find((r: any) => r.id === selectedCalculationId);
+            if (sel && sel.status !== 'published') {
+              return (
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a', fontWeight: 600 }}
+                  onClick={async () => {
+                    if (!window.confirm(`Publish ${sel.program} Semester ${sel.semester} results officially to database?`)) return;
+                    try {
+                      const res = await fetch('/api/verify', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ calculationId: sel.id, status: 'published' }),
+                      });
+                      const json = await res.json();
+                      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to publish.');
+                      alert('Result published successfully! It is now officially available in Rechecking, Reports, Grade Sheets, and Tabular Register.');
+                      await loadSavedCalculations();
+      if (onSync) await onSync();
+                      if (onSync) await onSync();
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to publish.');
+                    }
+                  }}
+                >
+                  Publish Result
+                </button>
+              );
+            }
+            return null;
+          })()}
 
           <button
             type="button"
@@ -1609,16 +1646,44 @@ export function ProcessView({ db, onProceedToVerify }: ProcessViewProps) {
                 Calculation ID {result.calculationId || result.id} has been saved as calculated data. Switch to Tab 2 to verify, then Tab 3 to publish to the main DB.
               </p>
             </div>
-            {onProceedToVerify && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
               <button
                 type="button"
                 className="btn primary"
-                onClick={onProceedToVerify}
-                style={{ padding: '10px 20px', fontWeight: 700 }}
+                style={{ background: '#16a34a', borderColor: '#16a34a', color: '#fff', padding: '10px 20px', fontWeight: 700 }}
+                onClick={async () => {
+                  const calcId = result.calculationId || result.id;
+                  if (!window.confirm(`Publish this calculation (${calcId}) officially to database?`)) return;
+                  try {
+                    const res = await fetch('/api/verify', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ calculationId: calcId, status: 'published' }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to publish.');
+                    alert('Result published successfully! It is now officially available in Rechecking, Reports, Grade Sheets, and Tabular Register.');
+                    await loadSavedCalculations();
+      if (onSync) await onSync();
+                    if (onSync) await onSync();
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to publish.');
+                  }
+                }}
               >
-                Proceed to Step 2 (Verify Result) &rarr;
+                Publish Result Now &rarr;
               </button>
-            )}
+              {onProceedToVerify && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={onProceedToVerify}
+                  style={{ padding: '10px 20px', fontWeight: 700 }}
+                >
+                  Step 2 (Verify) &rarr;
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

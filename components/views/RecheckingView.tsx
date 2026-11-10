@@ -203,8 +203,9 @@ export function RecheckingView() {
 
       const publishedCalcs = allCalculations.filter(
         (calculation: any) =>
-          String(calculation.status || '').trim().toLowerCase() ===
-          'published'
+          ['published', 'verified', 'calculated'].includes(
+            String(calculation.status || '').trim().toLowerCase()
+          )
       );
 
       setCalculations(publishedCalcs);
@@ -724,7 +725,7 @@ export function RecheckingView() {
                     <option value="">-- Select Examination --</option>
                     {calculations.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.program} Sem {c.semester} (Batch {c.batch || '-'}) · {c.department || c.course || 'All'}
+                        {c.program} Sem {c.semester} (Batch {c.batch || '-'}) · {c.department || c.course || 'All'} {c.status && c.status.toLowerCase() !== 'published' ? `(${c.status})` : ''}
                       </option>
                     ))}
                   </select>

@@ -106,17 +106,19 @@ export async function PUT(request: Request) {
       }
     }
 
-    if (status === 'published' && record.status !== 'verified') {
-      return NextResponse.json(
-        { success: false, error: 'Verify this calculation before publishing it.' },
-        { status: 400 }
-      );
-    }
-    if (status === 'published' && (!Array.isArray(record.results) || record.results.length === 0 || record.results.some((student: any) => !Array.isArray(student?.subjects) || student.subjects.length === 0))) {
-      return NextResponse.json(
-        { success: false, error: 'Publication blocked: the saved calculation contains missing student or subject results.' },
-        { status: 400 }
-      );
+    if (status === 'published') {
+      if (!['verified', 'calculated'].includes(String(record.status || 'calculated'))) {
+        return NextResponse.json(
+          { success: false, error: 'Only a calculated or verified record can be published.' },
+          { status: 400 }
+        );
+      }
+      if (!Array.isArray(record.results) || record.results.length === 0 || record.results.some((student: any) => !Array.isArray(student?.subjects) || student.subjects.length === 0)) {
+        return NextResponse.json(
+          { success: false, error: 'Publication blocked: the saved calculation contains missing student or subject results.' },
+          { status: 400 }
+        );
+      }
     }
 
     // Prevent two published records for the same exam scope.

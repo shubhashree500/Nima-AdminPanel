@@ -176,7 +176,7 @@ export async function POST(request: Request) {
       : [];
 
     const matchingRecords = records.filter((record: any) => {
-      if (record.status !== 'published') return false;
+      if (record.status && !['published', 'verified', 'calculated'].includes(String(record.status).toLowerCase())) return false;
       if (record.program !== program) return false;
       if (Number(record.semester) !== semester) return false;
       if (String(record.batch ?? '') !== batch) return false;

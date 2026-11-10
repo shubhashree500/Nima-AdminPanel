@@ -253,7 +253,7 @@ function getStudentStatus(row: any): string {
    VERIFY RESULT
 ========================================================= */
 
-export function VerifyView() {
+export function VerifyView({ onSync }: { onSync?: () => Promise<void> } = {}) {
   const [records, setRecords] = useState<Calculation[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -394,6 +394,9 @@ export function VerifyView() {
       setMessageType('ok');
 
       await loadRecords();
+      if (onSync) {
+        await onSync();
+      }
     } catch (error) {
       setMessage(
         error instanceof Error

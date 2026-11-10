@@ -23,6 +23,24 @@ interface AdminPanelProps {
   initialData: DBData;
 }
 
+const VALID_PAGES: PageKey[] = [
+  'dash',
+  'setup',
+  'students',
+  'marks',
+  'process',
+  'results',
+  'overview',
+  'exam-sessions',
+  'verify',
+  'publish',
+  'grade-sheets',
+  'tabular-register',
+  'statistics',
+  'rechecking',
+  'settings',
+];
+
 export function AdminPanel({ initialData }: AdminPanelProps) {
   const [db, setDb] = useState<DBData>(initialData);
   const [page, setPage] = useState<PageKey>('dash');
@@ -30,23 +48,53 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
-  // Check stored auth session - starting from localhost:3000 starts on landing page
+  // Check stored auth session & restore current page
   useEffect(() => {
     try {
-      // Clear persistent storage so visiting localhost:3000 always starts from landing page
       localStorage.removeItem('result_erp_auth');
       const stored = sessionStorage.getItem('result_erp_auth');
       if (stored) {
         setCurrentUser(JSON.parse(stored));
       }
+
+      // Check URL query param or sessionStorage for active page
+      const params = new URLSearchParams(window.location.search);
+      const urlPage = params.get('page') as PageKey;
+      if (urlPage && VALID_PAGES.includes(urlPage)) {
+        setPage(urlPage);
+      } else {
+        const savedPage = sessionStorage.getItem('result_erp_page') as PageKey;
+        if (savedPage && VALID_PAGES.includes(savedPage)) {
+          setPage(savedPage);
+          const url = new URL(window.location.href);
+          url.searchParams.set('page', savedPage);
+          window.history.replaceState(null, '', url.toString());
+        }
+      }
     } catch {}
     setIsAuthChecked(true);
+  }, []);
+
+  // Listen to popstate (back/forward browser buttons)
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlPage = params.get('page') as PageKey;
+        if (urlPage && VALID_PAGES.includes(urlPage)) {
+          setPage(urlPage);
+        }
+      } catch {}
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const handleLogout = () => {
     try {
       localStorage.removeItem('result_erp_auth');
       sessionStorage.removeItem('result_erp_auth');
+      sessionStorage.removeItem('result_erp_page');
     } catch {}
     setCurrentUser(null);
   };
@@ -84,6 +132,16 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
 
   const handlePageChange = (newPage: PageKey) => {
     setPage(newPage);
+
+    try {
+      sessionStorage.setItem('result_erp_page', newPage);
+      const url = new URL(window.location.href);
+      url.searchParams.set('page', newPage);
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+
+    // Refresh database in background when changing page
+    void refreshData();
 
     window.scrollTo({
       top: 0,
@@ -477,6 +535,34 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
     return false;
   };
 
+  if (!isAuthChecked) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f8fafc',
+        fontFamily: 'system-ui, sans-serif',
+        color: '#64748b',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            border: '3px solid #e2e8f0',
+            borderTopColor: '#2563eb',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            margin: '0 auto 12px',
+          }} />
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <p style={{ fontSize: '13px', margin: 0 }}>Loading Portal...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     return (
       <LandingPage
@@ -523,7 +609,7 @@ export function AdminPanel({ initialData }: AdminPanelProps) {
           />
         )}
 
-        {page === 'process' && <ResultProcessingView db={db} />}
+        {page === 'process' && <ResultProcessingView db={db} onSync={refreshData} />}
 
         {page === 'verify' && <VerifyView />}
 

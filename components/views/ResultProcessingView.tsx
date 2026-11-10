@@ -14,8 +14,20 @@ const tabs: { id: ProcessingTab; label: string; description: string }[] = [
   { id: 'publish', label: '3. Publish Result', description: 'Officially publish verified results to the database' },
 ];
 
-export function ResultProcessingView({ db }: { db?: DBData }) {
+export function ResultProcessingView({
+  db,
+  onSync,
+}: {
+  db?: DBData;
+  onSync?: () => Promise<void>;
+}) {
   const [activeTab, setActiveTab] = useState<ProcessingTab>('process');
+
+  const handleSync = async () => {
+    if (onSync) {
+      await onSync();
+    }
+  };
 
   return (
     <section style={{ width: '100%' }}>
@@ -90,10 +102,11 @@ export function ResultProcessingView({ db }: { db?: DBData }) {
           <ProcessView
             db={db}
             onProceedToVerify={() => setActiveTab('verify')}
+            onSync={handleSync}
           />
         )}
-        {activeTab === 'verify' && <VerifyView />}
-        {activeTab === 'publish' && <PublishView />}
+        {activeTab === 'verify' && <VerifyView onSync={handleSync} />}
+        {activeTab === 'publish' && <PublishView onSync={handleSync} />}
       </div>
     </section>
   );

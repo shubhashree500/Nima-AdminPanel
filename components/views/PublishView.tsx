@@ -167,7 +167,7 @@ function formatStatus(value?: string): string {
   return (value || 'calculated').toLowerCase();
 }
 
-export function PublishView() {
+export function PublishView({ onSync }: { onSync?: () => Promise<void> } = {}) {
   const [records, setRecords] = useState<Calculation[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -223,17 +223,18 @@ export function PublishView() {
           return current;
         }
 
-        // Prefer a verified result ready for publication.
+        // Prefer verified, then calculated, then published
         const verified = data.find(
           (item) => formatStatus(item.status) === 'verified',
         );
-
-        // If no verified result exists, show the latest published one.
+        const calculated = data.find(
+          (item) => formatStatus(item.status) === 'calculated',
+        );
         const published = data.find(
           (item) => formatStatus(item.status) === 'published',
         );
 
-        return verified?.id || published?.id || '';
+        return verified?.id || calculated?.id || published?.id || data[0]?.id || '';
       });
     } catch (error) {
       setMessage({
@@ -257,7 +258,7 @@ export function PublishView() {
   const publishableRecords = useMemo(
     () =>
       records.filter((item) =>
-        ['verified', 'published'].includes(
+        ['verified', 'calculated', 'published'].includes(
           formatStatus(item.status),
         ),
       ),
@@ -318,7 +319,7 @@ export function PublishView() {
   const publish = async () => {
     if (
       !selected ||
-      formatStatus(selected.status) !== 'verified' ||
+      formatStatus(selected.status) === 'published' ||
       busy
     ) {
       return;
@@ -370,6 +371,9 @@ export function PublishView() {
       });
 
       await load();
+      if (onSync) {
+        await onSync();
+      }
       setShowPublishSuccessPopup(true);
     } catch (error) {
       setMessage({
@@ -717,7 +721,7 @@ export function PublishView() {
                 <button
                   type="button"
                   onClick={() => void publish()}
-                  disabled={busy || status !== 'verified'}
+                  disabled={busy || status === 'published'}
                   className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
                 >
                   {busy ? (

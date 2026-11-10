@@ -362,8 +362,8 @@ const load = useCallback(async () => {
     setSelectedId((current) =>
       current && data.some((r) => r.id === current)
         ? current
-        : data.find((r) => r.status === 'published')?.id ||
-          data[0]?.id ||
+        : data[0]?.id ||
+          data.find((r) => r.status === 'published')?.id ||
           ''
     );
 

@@ -170,8 +170,8 @@ export function StudentResultsView() {
       setSelectedId((current) =>
         current && data.some((record) => record.id === current)
           ? current
-          : data.find((record) => record.status === 'published')?.id ||
-            data[0]?.id ||
+          : data[0]?.id ||
+            data.find((record) => record.status === 'published')?.id ||
             ''
       );
 

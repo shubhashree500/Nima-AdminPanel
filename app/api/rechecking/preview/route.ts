@@ -992,9 +992,9 @@ export async function POST(request: Request) {
       return errorResponse('Original calculation was not found.', 404);
     }
 
-    if (original.status !== 'published') {
+    if (original.status && !['published', 'verified', 'calculated'].includes(String(original.status).toLowerCase())) {
       return errorResponse(
-        'Corrections can only start from a published calculation.',
+        'Corrections can only start from a valid calculation record.',
         400
       );
     }
