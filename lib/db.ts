@@ -1,33 +1,96 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { DBData, PROG, DEF_SUBJECTS, ProgramKey } from '../types';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const SOURCE_DATA_DIR = path.join(process.cwd(), 'data');
+
+let resolvedWritableDir: string | null = null;
+
+export function getDataDir(): string {
+  if (process.env.ADMIN_PANEL_DATA_DIR) {
+    return process.env.ADMIN_PANEL_DATA_DIR;
+  }
+
+  if (resolvedWritableDir) {
+    return resolvedWritableDir;
+  }
+
+  // Detect serverless environments (Vercel, AWS Lambda, Netlify, etc.)
+  const isServerless =
+    Boolean(process.env.VERCEL) ||
+    Boolean(process.env.VERCEL_ENV) ||
+    Boolean(process.env.NOW_REGION) ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    Boolean(process.env.LAMBDA_TASK_ROOT);
+
+  if (isServerless) {
+    resolvedWritableDir = path.join(os.tmpdir(), 'admin-panel-data');
+    return resolvedWritableDir;
+  }
+
+  // Check if SOURCE_DATA_DIR is writable (fails on read-only environments like Vercel)
+  try {
+    if (!fs.existsSync(SOURCE_DATA_DIR)) {
+      fs.mkdirSync(SOURCE_DATA_DIR, { recursive: true });
+    }
+    const testFile = path.join(
+      SOURCE_DATA_DIR,
+      `.write-check-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
+    );
+    fs.writeFileSync(testFile, 'ok', 'utf-8');
+    fs.unlinkSync(testFile);
+    resolvedWritableDir = SOURCE_DATA_DIR;
+    return resolvedWritableDir;
+  } catch {
+    // Read-only filesystem detected, fallback to writable temp directory
+    resolvedWritableDir = path.join(os.tmpdir(), 'admin-panel-data');
+    return resolvedWritableDir;
+  }
+}
 
 export function getDbFilePath(): string {
+  const dataDir = getDataDir();
+
+  let resolvedPath: string;
   if (process.env.ADMIN_PANEL_DB_FILE) {
     const rawFile = process.env.ADMIN_PANEL_DB_FILE;
-    return path.isAbsolute(rawFile)
+    resolvedPath = path.isAbsolute(rawFile)
       ? rawFile
-      : path.join(DATA_DIR, path.basename(rawFile));
+      : path.join(dataDir, path.basename(rawFile));
+  } else {
+    const mode = process.env.ADMIN_PANEL_DB_MODE;
+    if (!mode || mode === 'production' || mode === 'live' || mode === 'development') {
+      resolvedPath = path.join(dataDir, 'db.json');
+    } else if (mode === 'rechecking-test') {
+      resolvedPath = path.join(dataDir, 'db.recovery-test.json');
+    } else if (mode === 'day1-test') {
+      resolvedPath = path.join(dataDir, 'db.day1-test.json');
+    } else {
+      throw new Error(
+        `Invalid or unrecognized ADMIN_PANEL_DB_MODE: "${mode}". Refusing to fall back to live database.`
+      );
+    }
   }
 
-  const mode = process.env.ADMIN_PANEL_DB_MODE;
-  if (!mode || mode === 'production' || mode === 'live' || mode === 'development') {
-    return path.join(DATA_DIR, 'db.json');
+  // If running in a separate writable directory (like /tmp on Vercel),
+  // seed from bundled data directory if writable file does not exist yet
+  if (dataDir !== SOURCE_DATA_DIR && !fs.existsSync(resolvedPath)) {
+    const seedFile = path.join(SOURCE_DATA_DIR, path.basename(resolvedPath));
+    if (fs.existsSync(seedFile)) {
+      try {
+        const dir = path.dirname(resolvedPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.copyFileSync(seedFile, resolvedPath);
+      } catch (err) {
+        console.warn(`Could not seed database file from "${seedFile}" to "${resolvedPath}":`, err);
+      }
+    }
   }
 
-  if (mode === 'rechecking-test') {
-    return path.join(DATA_DIR, 'db.recovery-test.json');
-  }
-
-  if (mode === 'day1-test') {
-    return path.join(DATA_DIR, 'db.day1-test.json');
-  }
-
-  throw new Error(
-    `Invalid or unrecognized ADMIN_PANEL_DB_MODE: "${mode}". Refusing to fall back to live database.`
-  );
+  return resolvedPath;
 }
 
 export function generateInitialData(includeDemo = true): DBData {
@@ -131,21 +194,31 @@ export function generateInitialData(includeDemo = true): DBData {
 
 export function getDB(): DBData {
   const dbFile = getDbFilePath();
+  const dir = path.dirname(dbFile);
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
 
     if (!fs.existsSync(dbFile)) {
-      const initial = generateInitialData();
+      const seedFile = path.join(SOURCE_DATA_DIR, path.basename(dbFile));
+      if (fs.existsSync(seedFile)) {
+        try {
+          fs.copyFileSync(seedFile, dbFile);
+        } catch (copyErr) {
+          console.warn(`Could not copy seed file from "${seedFile}" to "${dbFile}":`, copyErr);
+        }
+      }
 
-      fs.writeFileSync(
-        dbFile,
-        JSON.stringify(initial, null, 2),
-        'utf-8'
-      );
-
-      return initial;
+      if (!fs.existsSync(dbFile)) {
+        const initial = generateInitialData();
+        fs.writeFileSync(
+          dbFile,
+          JSON.stringify(initial, null, 2),
+          'utf-8'
+        );
+        return initial;
+      }
     }
 
     const raw = fs.readFileSync(dbFile, 'utf-8');
@@ -169,7 +242,7 @@ export function getDB(): DBData {
     }
 
     return parsed;
-    } catch (error) {
+  } catch (error) {
     console.error(`Error reading database file "${dbFile}":`, error);
     throw error;
   }
@@ -177,15 +250,16 @@ export function getDB(): DBData {
 
 export function saveDB(data: DBData): void {
   const dbFile = getDbFilePath();
+  const dir = path.dirname(dbFile);
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
 
-    // Safe atomic write
+    // Safe atomic write in the same directory as dbFile
     const tempFile = path.join(
-      DATA_DIR,
-      `db.${Date.now()}.tmp`
+      dir,
+      `db.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
     );
 
     fs.writeFileSync(
@@ -194,9 +268,15 @@ export function saveDB(data: DBData): void {
       'utf-8'
     );
 
-    fs.renameSync(tempFile, dbFile);
+    try {
+      fs.renameSync(tempFile, dbFile);
+    } catch (renameError) {
+      // Fallback in case renameSync fails across filesystem boundaries
+      fs.copyFileSync(tempFile, dbFile);
+      fs.unlinkSync(tempFile);
+    }
   } catch (error) {
-    console.error('Error saving DB:', error);
+    console.error(`Error saving database file "${dbFile}":`, error);
     throw error;
   }
 }
